@@ -1,5 +1,6 @@
+#include <sstream>
+
 #include <bson.h>
-#include <pthread.h>
 #include <pwd.h>
 #include <stdarg.h>
 #include <stdbool.h>
@@ -12,7 +13,6 @@
 #include "phrase.h"
 #include "server.h"
 #include "draconity.h"
-#include "tack.h"
 
 #define align4(len) ((len + 4) & ~3)
 
@@ -21,9 +21,6 @@
 #ifndef streq
 #define streq(a, b) !strcmp(a, b)
 #endif
-
-struct state draconity_state = {0};
-#define state draconity_state
 
 #define US  1
 #define MS  (1000 * US)
@@ -59,7 +56,8 @@ static bson_t *success_msg() {
     return BCON_NEW("success", BCON_BOOL(true));
 }
 
-static int grammar_disable(draconity_grammar *grammar, char **errmsg) {
+/*
+static int grammar_disable(Grammar *grammar, char **errmsg) {
     int rc = 0;
     if ((rc =_DSXGrammar_Deactivate(grammar->handle, 0, grammar->main_rule))) {
         asprintf(errmsg, "error deactivating grammar: %d", rc);
@@ -81,15 +79,15 @@ static int grammar_disable(draconity_grammar *grammar, char **errmsg) {
     return 0;
 }
 
-static void grammar_free(draconity_grammar *g) {
+static void grammar_free(Grammar *g) {
     free((void *)g->main_rule);
     free((void *)g->name);
     free((void *)g->appname);
-    memset(g, 0, sizeof(draconity_grammar));
+    memset(g, 0, sizeof(Grammar));
     free(g);
 }
 
-static int grammar_unload(draconity_grammar *g) {
+static int grammar_unload(Grammar *g) {
     char *disablemsg = NULL;
     int rc = 0;
     if (g->enabled) {
@@ -101,7 +99,7 @@ static int grammar_unload(draconity_grammar *g) {
     }
     rc = _DSXGrammar_Destroy(g->handle);
 
-    pthread_mutex_lock(&state.keylock);
+    draconity->keylock.lock();
     tack_hdel(&state.grammars, g->name);
     tack_remove(&state.grammars, g);
     // see comment in g.load for more info on keys
@@ -114,15 +112,16 @@ static int grammar_unload(draconity_grammar *g) {
     tack_push(&state.gkfree, reuse);
 
     grammar_free(g);
-    pthread_mutex_unlock(&state.keylock);
+    draconity->keylock.unlock();
     return rc;
 }
+*/
 
 static bson_t *handle_message(const uint8_t *msg, uint32_t msglen) {
-    char *errmsg = NULL;
-    bool errfree = false;
+    std::ostringstream errstream;
+    std::string errmsg = "";
 
-    draconity_grammar *grammar = NULL;
+    Grammar *grammar = NULL;
     char *cmd = NULL, *name = NULL, *list = NULL, *main_rule = NULL;
     bool enabled = false, exclusive = false;
     int priority = 0;
@@ -169,13 +168,14 @@ static bson_t *handle_message(const uint8_t *msg, uint32_t msglen) {
             }
         }
     }
-    if (name) grammar = tack_hget(&state.grammars, name);
+    if (name)
+        grammar = draconity->grammar_get(name);
     if (!cmd) {
         errmsg = "missing or broken cmd field";
         goto end;
     }
     if (cmd[0] == 'w') {
-        if (!state.ready) goto not_ready;
+        if (!draconity->ready) goto not_ready;
         if (!_DSXEngine_EnumWords ||
                 !_DSXWordEnum_Next ||
                 !_DSXEngine_AddWord ||
@@ -200,7 +200,7 @@ static bson_t *handle_message(const uint8_t *msg, uint32_t msglen) {
             }
             uint32_t max_size = 0x200000, max_words = 50000;
             bson_reserve_buffer(response, max_size);
-            char *buf = malloc(max_size);
+            char *buf = new char[max_size];
             int err = 0;
             while (1) {
                 uint32_t size = 0, count = 0;
@@ -219,8 +219,8 @@ static bson_t *handle_message(const uint8_t *msg, uint32_t msglen) {
                     pos += (word_size + 4) & ~3;
                 }
             }
-            free(buf);
-            if (errmsg) {
+            delete []buf;
+            if (errmsg.size() > 0) {
                 bson_free(response);
                 goto end;
             }
@@ -272,69 +272,73 @@ static bson_t *handle_message(const uint8_t *msg, uint32_t msglen) {
         resp = success_msg();
     } else if (cmd[0] == 'g') {
         if (streq(cmd, "g.update")) {
-            if (!state.ready) goto not_ready;
+            if (!draconity->ready) goto not_ready;
             if (streq(name, "dragon")) {
-                pthread_mutex_lock(&state.dragon_lock);
-                foreign_grammar *fg;
+                draconity->set_dragon_enabled(enabled);
+                /*
+                draconity->dragon_lock.lock();
                 if (has_enabled && enabled != state.dragon_enabled) {
                     tack_foreach(&state.dragon_grammars, fg) {
                         int rc;
                         if (enabled) {
                             if ((rc = _DSXGrammar_Activate(fg->grammar, fg->unk1, fg->unk2, fg->main_rule))) {
-                                asprintf(&errmsg, "error activating grammar: %d", rc);
-                                errfree = true;
+                                errstream << "error activating grammar: " << rc;
+                                errmsg = errstream.str();
                                 break;
                             }
                         } else {
                             if ((rc =_DSXGrammar_Deactivate(grammar->handle, fg->unk1, grammar->main_rule))) {
-                                asprintf(&errmsg, "error deactivating grammar: %d", rc);
-                                errfree = true;
+                                errstream << "error deactivating grammar: " << rc;
+                                errmsg = errstream.str();
                                 break;
                             }
                         }
                     }
                     state.dragon_enabled = enabled;
                 }
-                pthread_mutex_unlock(&state.dragon_lock);
-                if (!errmsg) resp = success_msg();
+                draconity->dragon_lock.unlock();
+                */
+                if (errmsg.size() == 0) resp = success_msg();
                 goto end;
             }
             if (!grammar) goto no_grammar;
 
             if (has_enabled && enabled != grammar->enabled) {
-                errfree = true;
                 if (enabled) {
                     int rc = 0;
                     if ((rc = _DSXGrammar_Activate(grammar->handle, 0, false, grammar->main_rule))) {
-                        asprintf(&errmsg, "error activating grammar: %d", rc);
+                        errstream << "error activating grammar: " << rc;
+                        errmsg = errstream.str();
                         goto end;
                     }
                     if ((rc = _DSXGrammar_RegisterEndPhraseCallback(grammar->handle, phrase_end, (void *)grammar->key, &grammar->endkey))) {
-                        asprintf(&errmsg, "error registering end phrase callback: %d", rc);
+                        errstream << "error registering end phrase callback: " << rc;
+                        errmsg = errstream.str();
                         goto end;
                     }
                     if ((rc = _DSXGrammar_RegisterPhraseHypothesisCallback(grammar->handle, phrase_hypothesis, (void *)grammar->key, &grammar->hypokey))) {
-                        asprintf(&errmsg, "error registering phrase hypothesis callback: %d", rc);
+                        errstream << "error registering phrase hypothesis callback: " << rc;
+                        errmsg = errstream.str();
                         goto end;
                     }
                     if ((rc = _DSXGrammar_RegisterBeginPhraseCallback(grammar->handle, phrase_begin, (void *)grammar->key, &grammar->beginkey))) {
-                        asprintf(&errmsg, "error registering begin phrase callback: %d", rc);
+                        errstream << "error registering begin phrase callback: " << rc;
+                        errmsg = errstream.str();
                         goto end;
                     }
                 } else {
-                    if (grammar_disable(grammar, &errmsg)) {
-                        errfree = true;
+                    errmsg = draconity->grammar_disable(grammar);
+                    if (errmsg.size() > 0) {
                         goto end;
                     }
                 }
-                errfree = false;
                 grammar->enabled = enabled;
             }
             if (has_exclusive && exclusive != grammar->exclusive) {
                 int rc = _DSXGrammar_SetSpecialGrammar(grammar->handle, exclusive);
                 if (rc) {
-                    asprintf(&errmsg, "error setting exclusive grammar: %d", rc);
-                    errfree = true;
+                    errstream << "error setting exclusive grammar: " << rc;
+                    errmsg = errstream.str();
                     goto end;
                 }
                 grammar->exclusive = exclusive;
@@ -342,15 +346,15 @@ static bson_t *handle_message(const uint8_t *msg, uint32_t msglen) {
             if (has_priority && priority != grammar->priority) {
                 int rc = _DSXGrammar_SetPriority(grammar->handle, priority);
                 if (rc) {
-                    asprintf(&errmsg, "error setting priority: %d", rc);
-                    errfree = true;
+                    errstream << "error setting priority: " << rc;
+                    errmsg = errstream.str();
                     goto end;
                 }
                 grammar->priority = priority;
             }
             resp = success_msg();
         } else if (streq(cmd, "g.listset")) {
-            if (!state.ready) goto not_ready;
+            if (!draconity->ready) goto not_ready;
             if (!grammar) goto no_grammar;
             if (!list) {
                 errmsg = "missing or broken list name";
@@ -389,9 +393,9 @@ static bson_t *handle_message(const uint8_t *msg, uint32_t msglen) {
                 memcpy(ent->name, word, length);
                 pos += ent->size;
             }
-            pthread_mutex_lock(&state.dragon_lock);
+            draconity->dragon_lock.lock();
             int ret = _DSXGrammar_SetList(grammar->handle, list, &dp);
-            pthread_mutex_unlock(&state.dragon_lock);
+            draconity->dragon_lock.unlock();
             if (ret) {
                 errmsg = "error setting list";
                 goto end;
@@ -399,17 +403,17 @@ static bson_t *handle_message(const uint8_t *msg, uint32_t msglen) {
             resp = success_msg();
             free(dp.data);
         } else if (streq(cmd, "g.unload")) {
-            if (!state.ready) goto not_ready;
+            if (!draconity->ready) goto not_ready;
             if (!grammar) goto no_grammar;
-            int rc = grammar_unload(grammar);
+            int rc = draconity->grammar_unload(grammar);
             if (rc) {
-                asprintf(&errmsg, "error unloading grammar: %d", rc);
-                errfree = true;
+                errstream << "error unloading grammar: " << rc;
+                errmsg = errstream.str();
                 goto end;
             }
             resp = success_msg();
         } else if (streq(cmd, "g.load")) {
-            if (!state.ready) goto not_ready;
+            if (!draconity->ready) goto not_ready;
             if (streq(name, "dragon")) {
                 errmsg = "'dragon' grammar name is reserved";
                 goto end;
@@ -424,23 +428,21 @@ static bson_t *handle_message(const uint8_t *msg, uint32_t msglen) {
             }
             if (grammar) {
                 draconity_logf("warning: reloading \"%s\"", name);
-                int rc = grammar_unload(grammar);
-                if (rc) {
-                    asprintf(&errmsg, "error unloading grammar: %d", rc);
-                    errfree = true;
+                errmsg = draconity->grammar_unload(grammar);
+                if (errmsg.size() > 0)
                     goto end;
-                }
             }
-            grammar = calloc(1, sizeof(draconity_grammar));
-            grammar->name = strdup(name);
-            grammar->main_rule = strdup(main_rule);
+            grammar = new Grammar(name, main_rule);
+            // FIXME:
+            draconity->grammar_load(grammar);
+#if 0
             dsx_dataptr dp = {.data = (void *)data_buf, .size = data_len};
 
             int ret = _DSXEngine_LoadGrammar(_engine, 1 /*cfg*/, &dp, &grammar->handle);
             if (ret > 0) {
-                asprintf(&errmsg, "error loading grammar: %d", ret);
-                errfree = true;
-                grammar_free(grammar);
+                errstream << "error loading grammar: " << ret;
+                errmsg = errstream.str();
+                delete grammar;
                 goto end;
             }
             tack_push(&state.grammars, grammar);
@@ -468,6 +470,7 @@ static bson_t *handle_message(const uint8_t *msg, uint32_t msglen) {
                 tack_push(&state.gkeys, grammar);
             }
             pthread_mutex_unlock(&state.keylock);
+#endif
             // printf("%d\n", _DSXGrammar_SetApplicationName(grammar->handle, grammar->name));
             resp = success_msg();
         } else {
@@ -480,11 +483,13 @@ static bson_t *handle_message(const uint8_t *msg, uint32_t msglen) {
         const char *key;
         bson_t *doc = BCON_NEW(
             "success", BCON_BOOL(true),
-            "ready", BCON_BOOL(state.ready),
-            "runtime", BCON_INT64(bson_get_monotonic_time() - state.start_ts));
+            "ready", BCON_BOOL(draconity->ready),
+            "runtime", BCON_INT64(bson_get_monotonic_time() - draconity->start_ts));
 
         BSON_APPEND_ARRAY_BEGIN(doc, "grammars", &grammars);
 
+        // FIXME:
+#if 0
         tack_foreach(&state.grammars, grammar) {
             bson_uint32_to_string(i, &key, keystr, sizeof(keystr));
             BSON_APPEND_DOCUMENT_BEGIN(&grammars, key, &child);
@@ -504,10 +509,11 @@ static bson_t *handle_message(const uint8_t *msg, uint32_t msglen) {
         bson_append_document_end(&grammars, &child);
 
         bson_append_array_end(doc, &grammars);
+#endif
 
         resp = doc;
     } else if (streq(cmd, "mimic")) {
-        if (!state.ready) goto not_ready;
+        if (!draconity->ready) goto not_ready;
         if (!phrase_buf || !phrase_len) {
             errmsg = "missing or broken phrase field";
             goto end;
@@ -541,23 +547,23 @@ static bson_t *handle_message(const uint8_t *msg, uint32_t msglen) {
             pos += length + 1;
             count++;
         }
-        pthread_mutex_lock(&state.mimic_lock);
-        state.mimic_success = false;
+        draconity->mimic_lock.lock();
+        draconity->mimic_success = false;
 
         int rc = _DSXEngine_Mimic(_engine, 0, count, &dp, 0, 2);
         if (rc) {
-            asprintf(&errmsg, "error during mimic: %d", rc);
-            errfree = true;
+            errstream << "error during mimic: " << rc;
             free(dp.data);
-            pthread_mutex_unlock(&state.mimic_lock);
+            draconity->mimic_lock.unlock();
             goto end;
         }
         free(dp.data);
         // TODO: if dragon fails to issue callback, draconity will hang forever
         struct timespec timeout = {.tv_sec = 10, .tv_nsec = 0};
-        rc = pthread_cond_timedwait_relative_np(&state.mimic_cond, &state.mimic_lock, &timeout);
-        pthread_mutex_unlock(&state.mimic_lock);
-        bool success = (rc == 0 && state.mimic_success);
+        // FIXME: port timedwait to C++
+        // rc = pthread_cond_timedwait_relative_np(&state.mimic_cond, &state.mimic_lock, &timeout);
+        draconity->mimic_lock.unlock();
+        bool success = (rc == 0 && draconity->mimic_success);
         if (!success) {
             errmsg = "mimic failed";
             goto end;
@@ -574,15 +580,13 @@ end:
     free(list);
 
     pub = bson_new();
-    BSON_APPEND_BOOL(pub, "success", errmsg == NULL);
-    if (errmsg == NULL && resp == NULL) {
+    BSON_APPEND_BOOL(pub, "success", errmsg.size() == 0);
+    if (errmsg.size() > 0 && resp == NULL) {
         resp = BCON_NEW("success", BCON_BOOL(false), "error", BCON_UTF8("request not handled"));
     }
-    if (errmsg != NULL) {
+    if (errmsg.size() > 0) {
         bson_free(resp);
-        resp = BCON_NEW("success", BCON_BOOL(false), "error", BCON_UTF8(errmsg));
-        BSON_APPEND_UTF8(pub, "error", errmsg);
-        if (errfree) free(errmsg);
+        resp = BCON_NEW("success", BCON_BOOL(false), "error", BCON_UTF8(errmsg.c_str()));
     }
     // reinit to reset + appease ASAN
     if (bson_init_static(&root, msg, msglen)) {
@@ -606,18 +610,13 @@ unsupported_command:
 
 void draconity_init(const char *name) {
     printf("[+] draconity init\n");
-    pthread_mutex_init(&state.keylock, NULL);
-    pthread_mutex_init(&state.dragon_lock, NULL);
-    pthread_mutex_init(&state.mimic_lock, NULL);
-    pthread_cond_init(&state.mimic_cond, NULL);
-    state.dragon_enabled = true;
-
+    // FIXME: this should just be draconity class init?
     draconity_transport_main(handle_message, name);
     draconity_publish("status", BCON_NEW("cmd", BCON_UTF8("thread_created")));
-    state.start_ts = bson_get_monotonic_time();
+    draconity->start_ts = bson_get_monotonic_time();
 }
 
-static char *micstates[] = {
+static const char *micstates[] = {
     "disabled",
     "off",
     "on",
@@ -627,29 +626,29 @@ static char *micstates[] = {
 };
 
 void draconity_ready() {
-    if (!state.ready) {
+    if (!draconity->ready) {
         printf("[+] status: ready\n");
         draconity_publish("status", BCON_NEW("cmd", BCON_UTF8("ready")));
-        state.ready = true;
+        draconity->ready = true;
     }
 }
 
 void draconity_attrib_changed(int key, dsx_attrib *attrib) {
     char *attr = attrib->name;
-    if (streq(attr, "MICON") && (!state.micstate || streq(state.micstate, "on"))) {
+    if (streq(attr, "MICON") && (!draconity->micstate || streq(draconity->micstate, "on"))) {
         draconity_publish("status", BCON_NEW("cmd", BCON_UTF8("mic"), "status", BCON_UTF8("on")));
-        state.micstate = "on";
+        draconity->micstate = "on";
     } else if (streq(attr, "MICSTATE")) {
         int64_t micstate = 0;
         _DSXEngine_GetMicState(_engine, &micstate);
-        char *name;
+        const char *name;
         if (micstate >= 0 && micstate <= 5) {
             name = micstates[micstate];
         } else {
             name = "invalid";
         }
-        if (!state.micstate || streq(state.micstate, name)) {
-            state.micstate = name;
+        if (!draconity->micstate || streq(draconity->micstate, name)) {
+            draconity->micstate = name;
             draconity_publish("status", BCON_NEW("cmd", BCON_UTF8("mic"), "status", BCON_UTF8(name)));
         }
     } else if (streq(attr, "SPEAKERCHANGED")) {
@@ -664,10 +663,11 @@ void draconity_attrib_changed(int key, dsx_attrib *attrib) {
 }
 
 void draconity_mimic_done(int key, dsx_mimic *mimic) {
-    pthread_mutex_lock(&state.mimic_lock);
-    state.mimic_success = true;
-    pthread_cond_signal(&state.mimic_cond);
-    pthread_mutex_unlock(&state.mimic_lock);
+    draconity->mimic_lock.lock();
+    draconity->mimic_success = true;
+    // FIXME: signal the condvar
+    // pthread_cond_signal(&state.mimic_cond);
+    draconity->mimic_lock.unlock();
 }
 
 void draconity_paused(int key, dsx_paused *paused) {
@@ -676,9 +676,9 @@ void draconity_paused(int key, dsx_paused *paused) {
 
 int draconity_phrase_begin(void *key, void *data) {
     // TODO: atomics? portability?
-    pthread_mutex_lock(&state.keylock);
-    state.serial++;
-    pthread_mutex_unlock(&state.keylock);
+    draconity->keylock.lock();
+    draconity->serial++;
+    draconity->keylock.unlock();
     return 0;
 }
 

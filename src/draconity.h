@@ -1,130 +1,83 @@
 #ifndef draconity_H
 #define draconity_H
 
-#include <stdint.h>
-#include "tack.h"
+#include <condition_variable>
+#include <list>
+#include <map>
+#include <mutex>
+#include <unordered_set>
 
-#ifdef VERBOSE
-#define dprintf(...) printf(__VA_ARGS__);
-#else
-#define dprintf(...)
-#endif
+#include "types.h"
 
-typedef struct {
-    void *data;
-    uint32_t size;
-} dsx_dataptr;
+class Grammar {
+    public:
+        Grammar(const char *name, const char *main_rule);
+        uintptr_t key;
+        const char *name, *main_rule;
+        drg_grammar *handle;
 
-typedef struct {
-    uint32_t size, id;
-    char name[0];
-} __attribute__((packed)) dsx_id;
+        bool enabled, exclusive;
+        int priority;
+        const char *appname;
+        unsigned int endkey, beginkey, hypokey;
+    private:
+};
 
-typedef struct {
-    uint32_t var1;
-    uint32_t var2;
-    uint32_t var3;
-    uint32_t var4;
-    uint32_t var5;
-    uint32_t var6;
-    uint64_t start_time;
-    uint64_t end_time;
-    uint32_t var7;
-    uint32_t var8;
-    uint32_t var9;
-    uint32_t var10;
-    uint32_t var11;
-    uint32_t var12;
-    uint32_t rule;
-    uint32_t var13;
-} __attribute__((packed)) dsx_word_node;
+class ForeignGrammar {
+    public:
+        ForeignGrammar();
+    private:
+        drg_grammar *grammar;
+        uint64_t unk1;
+        bool unk2;
+        const char *main_rule;
+};
 
-typedef struct {
-    uint32_t flags, num, flags2, flags3, tag;
-} __attribute__((packed)) drg_wordinfo;
+class Draconity {
+    public:
+        Draconity();
+        static Draconity *shared() {
+            static Draconity *shared = NULL;
+            if (!shared) shared = new Draconity();
+            return shared;
+        }
 
-typedef struct {} drg_grammar;
-typedef struct {} drg_engine;
-typedef struct {} drg_filesystem;
-typedef struct {} drg_worditer;
-typedef struct {} dsx_result;
+        std::string gkey_to_name(uintptr_t gkey);
 
-typedef struct {
-    void *var0;
-    unsigned int var1;
-    unsigned int flags;
-    uint64_t var3;
-    uint64_t var4;
-    char *phrase;
-    dsx_result *result;
-    void *var7;
-} dsx_end_phrase;
+        Grammar *grammar_get(const char *name);
+        void grammar_set(Grammar *grammar);
+        int grammar_enable(Grammar *g);
+        int grammar_disable(Grammar *g);
+        int grammar_load(Grammar *g);
+        int grammar_unload(Grammar *g);
 
-typedef struct {
-    void *user;
-    char *name;
-} dsx_attrib;
+        std::string set_dragon_enabled(bool enabled);
 
-typedef struct {
-    void *user;
-    uint64_t token;
-} dsx_paused;
+        std::mutex keylock;
+        std::map<std::string, Grammar *> grammars;
+        std::map<uintptr_t, std::string> gkeys;
+        std::list<uintptr_t> gkfree;
 
-typedef struct {
-    void *user;
-    uint64_t flags;
-} dsx_mimic;
+        const char *micstate;
+        bool ready;
+        uint64_t start_ts, serial;
 
-#define _engine draconity_engine
-extern drg_engine *_engine;
+        std::map<uintptr_t, ForeignGrammar *> dragon_grammars;
+        std::mutex dragon_lock;
+        bool dragon_enabled;
+
+        std::mutex mimic_lock;
+        std::condition_variable mimic_cond;
+        bool mimic_success;
+        drg_engine *engine;
+    private:
+};
+
+#define draconity (Draconity::shared())
+#define _engine draconity->engine
 
 #define DLAPI extern
 #include "api.h"
-
-struct state {
-    pthread_t tid;
-    pthread_mutex_t keylock;
-
-    tack_t grammars;
-    tack_t gkeys, gkfree;
-
-    // dragon state
-    const char *micstate;
-    void *speaker;
-    bool ready;
-    uint64_t start_ts;
-    uint64_t serial;
-
-    tack_t dragon_grammars;
-    pthread_mutex_t dragon_lock;
-    bool dragon_enabled;
-
-    pthread_mutex_t mimic_lock;
-    pthread_cond_t mimic_cond;
-    bool mimic_success;
-
-    void *broker;
-};
-
-extern struct state draconity_state;
-
-typedef struct {
-    uint64_t key;
-    const char *name, *main_rule;
-    drg_grammar *handle;
-
-    bool enabled, exclusive;
-    int priority;
-    const char *appname;
-    unsigned int endkey, beginkey, hypokey;
-} draconity_grammar;
-
-typedef struct {
-    drg_grammar *grammar;
-    uint64_t unk1;
-    bool unk2;
-    const char *main_rule;
-} foreign_grammar;
 
 int draconity_set_param(const char *key, const char *value);
 void draconity_set_default_params();

@@ -48,9 +48,9 @@ DLAPI int (*_DSXGrammar_Activate)(drg_grammar *grammar, uint64_t unk1, bool unk2
 DLAPI int (*_DSXGrammar_Deactivate)(drg_grammar *grammar, uint64_t unk1, const char *main_rule);
 DLAPI int (*_DSXGrammar_Destroy)(drg_grammar *);
 DLAPI int (*_DSXGrammar_GetList)(drg_grammar *grammar, const char *name, dsx_dataptr *data);
-DLAPI int (*_DSXGrammar_RegisterBeginPhraseCallback)(drg_grammar *grammar, void *cb, void *user, unsigned int *key);
-DLAPI int (*_DSXGrammar_RegisterEndPhraseCallback)(drg_grammar *grammar, void *cb, void *user, unsigned int *key);
-DLAPI int (*_DSXGrammar_RegisterPhraseHypothesisCallback)(drg_grammar *grammar, void *cb, void *user, unsigned int *key);
+DLAPI int (*_DSXGrammar_RegisterBeginPhraseCallback)(drg_grammar *grammar, int (*cb)(void *, void *), void *user, unsigned int *key);
+DLAPI int (*_DSXGrammar_RegisterEndPhraseCallback)(drg_grammar *grammar, int (*cb)(void *, dsx_end_phrase *), void *user, unsigned int *key);
+DLAPI int (*_DSXGrammar_RegisterPhraseHypothesisCallback)(drg_grammar *grammar, int (*cb)(void *, dsx_end_phrase *), void *user, unsigned int *key);
 DLAPI int (*_DSXGrammar_SetApplicationName)(drg_grammar *grammar, const char *name);
 DLAPI int (*_DSXGrammar_SetList)(drg_grammar *grammar, const char *name, dsx_dataptr *data);
 DLAPI int (*_DSXGrammar_GetApplicationName)(drg_grammar *grammar, char *buf, int buf_size, int *size_out);

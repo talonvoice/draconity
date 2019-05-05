@@ -1,10 +1,9 @@
 #include <bson.h>
-#include <pthread.h>
 #include "draconity.h"
 #include "phrase.h"
 #include "server.h"
 
-void phrase_to_bson(bson_t *obj, char *phrase) {
+static void phrase_to_bson(bson_t *obj, char *phrase) {
     bson_t array;
     char keystr[16];
     const char *key;
@@ -23,7 +22,7 @@ void phrase_to_bson(bson_t *obj, char *phrase) {
     bson_append_array_end(obj, &array);
 }
 
-void result_to_bson(bson_t *obj, dsx_result *result) {
+static void result_to_bson(bson_t *obj, dsx_result *result) {
     bson_t words;
     BSON_APPEND_ARRAY_BEGIN(obj, "words", &words);
     char keystr[16];
@@ -33,7 +32,7 @@ void result_to_bson(bson_t *obj, dsx_result *result) {
     size_t needed = 0;
     int rc = _DSXResult_BestPathWord(result, 0, &paths, 1, &needed);
     if (rc == 33) {
-        uint32_t *paths = calloc(1, needed);
+        uint32_t *paths = new uint32_t[needed];
         rc = _DSXResult_BestPathWord(result, 0, paths, needed, &needed);
         if (rc == 0) {
             dsx_word_node node;
@@ -56,30 +55,21 @@ void result_to_bson(bson_t *obj, dsx_result *result) {
                 bson_append_document_end(&words, &wdoc);
             }
         }
-        free(paths);
+        delete []paths;
     }
     bson_append_array_end(obj, &words);
 }
 
-static char *safe_gkey_to_name(void *key) {
-    char *name = NULL;
-    pthread_mutex_lock(&draconity_state.keylock);
-    draconity_grammar *g = tack_get(&draconity_state.gkeys, (int)key);
-    if (g) name = strdup(g->name);
-    pthread_mutex_unlock(&draconity_state.keylock);
-    return name;
-}
-
-int phrase_publish(void *key, dsx_end_phrase *endphrase, const char *cmd, bool hypothesis) {
-    char *name = safe_gkey_to_name(key);
-    if (!name) goto end;
-
+extern "C" int phrase_publish(void *key, dsx_end_phrase *endphrase, const char *cmd, bool hypothesis) {
     bool accept = (endphrase->flags & 1) == 1;
     bool ours = (endphrase->flags & 2) == 2;
     bson_t obj = BSON_INITIALIZER;
+
+    std::string name = draconity->gkey_to_name((uintptr_t)key);
+    if (name.size() == 0) goto end;
+
     BSON_APPEND_UTF8(&obj, "cmd", cmd);
-    BSON_APPEND_UTF8(&obj, "grammar", name);
-    free(name);
+    BSON_APPEND_UTF8(&obj, "grammar", name.c_str());
     if ((accept && ours) || hypothesis) {
         phrase_to_bson(&obj, endphrase->phrase);
         result_to_bson(&obj, endphrase->result);
@@ -95,18 +85,17 @@ end:
     return 0;
 }
 
-int phrase_end(void *key, dsx_end_phrase *endphrase) {
+extern "C" int phrase_end(void *key, dsx_end_phrase *endphrase) {
     return phrase_publish(key, endphrase, "p.end", false);
 }
 
-int phrase_hypothesis(void *key, dsx_end_phrase *endphrase) {
+extern "C" int phrase_hypothesis(void *key, dsx_end_phrase *endphrase) {
     return phrase_publish(key, endphrase, "p.hypothesis", true);
 }
 
-int phrase_begin(void *key, void *data) {
-    char *name = safe_gkey_to_name(key);
-    if (!name) return 0;
-    draconity_publish("phrase", BCON_NEW("cmd", BCON_UTF8("p.begin"), "grammar", BCON_UTF8(name)));
-    free(name);
+extern "C" int phrase_begin(void *key, void *data) {
+    std::string name = draconity->gkey_to_name((uintptr_t)key);
+    if (name.size() == 0) return 0;
+    draconity_publish("phrase", BCON_NEW("cmd", BCON_UTF8("p.begin"), "grammar", BCON_UTF8(name.c_str())));
     return 0;
 }
