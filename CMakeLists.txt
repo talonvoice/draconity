@@ -11,6 +11,7 @@ set(CMAKE_SKIP_BUILD_RPATH TRUE)
 set(CMAKE_BUILD_WITH_INSTALL_RPATH FALSE)
 
 link_directories(${CMAKE_LIBRARY_OUTPUT_DIRECTORY})
+include_directories(/usr/local/include/libbson-1.0)
 include_directories(src)
 if (ASAN)
     add_definitions(-fsanitize=address)
@@ -30,7 +31,11 @@ if (NOT ZYDIS)
     message(FATAL_ERROR "libzydis not found")
 endif()
 
-file(GLOB_RECURSE SOURCE src/*.c src/*.m)
+file(GLOB_RECURSE SOURCE src/*.c src/*.m src/*.cpp)
 add_library(draconity SHARED ${SOURCE})
 target_link_libraries(draconity m dl pthread ${BSON} ${ZYDIS})
 target_link_libraries(draconity -F/System/Library/PrivateFrameworks "-framework CoreSymbolication -framework AppKit")
+set_target_properties(draconity PROPERTIES
+    CXX_STANDARD 17
+    CXX_EXTENSIONS OFF
+)
