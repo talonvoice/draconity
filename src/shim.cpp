@@ -1,3 +1,6 @@
+// FIXME temporarily nooped to get this thing to compile on linux
+// (needs to be replaced with cross platform shimming approach)
+#if false
 #include <Zydis/Zydis.h>
 #include <asl.h>
 #include <bson.h>
@@ -568,3 +571,4 @@ void cons() {
 #endif
     draconity_install(NULL);
 }
+#endif

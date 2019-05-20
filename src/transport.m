@@ -1,3 +1,5 @@
+// FIXME delete this once new network layer is implemented
+// (keeping around as an easy reference for now)
 #import <AppKit/AppKit.h>
 #import "app/TalonHelper/TalonHelperProtocol.h"
 #include "transport.h"

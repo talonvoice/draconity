@@ -11,7 +11,10 @@ set(CMAKE_SKIP_BUILD_RPATH TRUE)
 set(CMAKE_BUILD_WITH_INSTALL_RPATH FALSE)
 
 link_directories(${CMAKE_LIBRARY_OUTPUT_DIRECTORY})
-include_directories(/usr/local/include/libbson-1.0)
+#FIXME need to fork based on OS here - or just add both dirs?
+#include_directories(/usr/local/include/libbson-1.0)
+include_directories(/usr/include/libbson-1.0)
+
 include_directories(src)
 if (ASAN)
     add_definitions(-fsanitize=address)
@@ -23,18 +26,28 @@ else()
 endif()
 
 find_library(BSON NAMES libbson-static-1.0.a)
-find_library(ZYDIS NAMES libzydis.a zydis)
 if (NOT BSON)
+    # Got an error here and are on linux? the apt package doesn't have a static
+    # lib for libbson, so need to build it yourself and then point cmake at it.
+    # Do an in-source build for libbson using the ccmake UI to turn on static build.
+    # You also need to add -fPIC to cmake's CFLAGS.
+    # Then invoke cmake for Draconity like:
+    # env CMAKE_LIBRARY_PATH=/home/caspar/src/libbson-1.9.2 cmake .
+    # Probably there's a better way but hey this works for now :)
     message(FATAL_ERROR "libbson not found")
 endif()
-if (NOT ZYDIS)
-    message(FATAL_ERROR "libzydis not found")
-endif()
+#FIXME need to sort out building Zydis, or at least flag it behind an OS check
+#find_library(ZYDIS NAMES libzydis.a zydis)
+#if (NOT ZYDIS)
+#    message(FATAL_ERROR "libzydis not found")
+#endif()
 
-file(GLOB_RECURSE SOURCE src/*.c src/*.m src/*.cpp)
+file(GLOB_RECURSE SOURCE src/*.c src/*.cpp)
 add_library(draconity SHARED ${SOURCE})
-target_link_libraries(draconity m dl pthread ${BSON} ${ZYDIS})
-target_link_libraries(draconity -F/System/Library/PrivateFrameworks "-framework CoreSymbolication -framework AppKit")
+# FIXME removed zydis from below, needs to be re-added but only for MacOS
+target_link_libraries(draconity m dl pthread ${BSON})
+# FIXME needs to be hidden behind OS check
+#target_link_libraries(draconity -F/System/Library/PrivateFrameworks "-framework CoreSymbolication -framework AppKit")
 set_target_properties(draconity PROPERTIES
     CXX_STANDARD 17
     CXX_EXTENSIONS OFF
