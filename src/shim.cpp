@@ -1,13 +1,23 @@
 // FIXME temporarily nooped to get this thing to compile on linux
 // (needs to be replaced with cross platform shimming approach)
-#if false
+
+// switch to allow toggling Zydis on/off (FIXME Zydis build hasn't been configured on Linux yet)
+#define USE_ZYDIS false
+
+#if USE_ZYDIS
 #include <Zydis/Zydis.h>
+#endif //USE_ZYDIS
+#if false //FIXME this seems to be unused?
+https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man3/asl.3.html
 #include <asl.h>
+#endif
 #include <bson.h>
 #include <dlfcn.h>
 #include <fcntl.h>
 #include <libgen.h>
+#ifdef __APPLE__
 #include <mach-o/dyld.h>
+#endif //__APPLE__
 #include <pthread.h>
 #include <pwd.h>
 #include <stdint.h>
@@ -18,10 +28,12 @@
 
 #include "server.h"
 #include "draconity.h"
+#ifdef __APPLE__
 #include "CoreSymbolication.h"
 
 // used to hook IOPMAssertionDeclareUserActivity
 #include <IOKit/pwr_mgt/IOPMLib.h>
+#endif //__APPLE__
 
 #ifndef streq
 #define streq(a, b) !strcmp(a, b)
@@ -30,12 +42,16 @@
 // #define DEBUG
 
 static void *server_so = NULL, *mrec_so = NULL;
+
+#if CPP_PORT_IS_DONE // unclear whether draconity.h's _engine macro usage here is intentional - suspect not though
 drg_engine *_engine = NULL;
+#endif //CPP_PORT_IS_DONE
+
 
 #include "api.h" // this defines the function pointers
 
 #define state draconity_state
-
+#if USE_ZYDIS
 typedef struct code_hook {
     struct code_hook **handle;
     const char *name;
@@ -67,7 +83,9 @@ static void hook_apply(code_hook *hook) {
 static void hook_revert(code_hook *hook) {
     patch_write(hook->addr, hook->orig, hook->size);
 }
+#endif //USE_ZYDIS
 
+#if RUN_IN_DRAGON
 int draconity_set_param(const char *key, const char *value) {
     if (!_engine) return -1;
     void *param = _DSXEngine_GetParam(_engine, key);
@@ -279,6 +297,7 @@ int DSXGrammar_SetList(drg_grammar *grammar, const char *name, dsx_dataptr *data
     pthread_mutex_unlock(&state.dragon_lock);
     return ret;
 }
+#endif //RUN_IN_DRAGON
 
 /*
 int DSXGrammar_RegisterEndPhraseCallback(drg_grammar *grammar, void *cb, void *user, unsigned int *key) {
@@ -300,6 +319,7 @@ int DSXGrammar_RegisterPhraseHypothesisCallback(drg_grammar *grammar, void *cb, 
 }
 */
 
+#if USE_ZYDIS
 // patching code starts here
 static ZydisDecoder dis;
 static ZydisFormatter dis_fmt;
@@ -370,6 +390,7 @@ typedef struct {
     bool active;
 } symload;
 
+#ifdef __APPLE__
 static void walk_image(CSSymbolicatorRef csym, const char *image, code_hook *hooks, symload *loads) {
     CSSymbolOwnerRef owner = CSSymbolicatorGetSymbolOwnerWithNameAtTime(csym, image, kCSNow);
     if (CSIsNull(owner)) {
@@ -450,6 +471,7 @@ IOReturn IOPMAssertionDeclareUserActivity(CFStringRef AssertionName, IOPMUserAct
     hook_apply(IOPMAssertionDeclareUserActivity_hook);
     return err;
 }
+#endif //__APPLE__
 
 #define h(_name) {.handle=NULL, .name=#_name, .target=_name, .offset=0, .active=false, 0}
 #define ho(_name, _handle) {.handle=_handle, .name=#_name, .target=_name, .offset=0, .active=false, 0}
@@ -534,10 +556,12 @@ static symload mrec_syms[] = {
     {0},
 };
 #undef s
+#endif //USE_ZYDIS
 
 static void *draconity_install(void *_) {
     printf("[+] draconity starting\n");
 
+#ifdef __APPLE__
     char *image = getenv("DRACONITY_IMAGE");
     if (!image) {
         char path[MAXPATHLEN];
@@ -558,6 +582,7 @@ static void *draconity_install(void *_) {
     if (!_engine) {
         printf("[+] waiting for engine\n");
     }
+#endif //__APPLE__
     draconity_init("dragon");
     return NULL;
 }
@@ -571,4 +596,3 @@ void cons() {
 #endif
     draconity_install(NULL);
 }
-#endif

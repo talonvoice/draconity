@@ -9,6 +9,14 @@
 
 #include "types.h"
 
+// Define to false to deactivate use of tack and other bits that still need porting to C++
+// (Breaks draconity but is helpful for testing the rest compiles.)
+#define CPP_PORT_IS_DONE false
+
+// Define to false to disable code that relies on dragon functions existing
+// (Makes draconity not so useful but it's helpful for testing other parts of the codebase.)
+#define RUN_IN_DRAGON false
+
 class Grammar {
     public:
         Grammar(const char *name, const char *main_rule);
