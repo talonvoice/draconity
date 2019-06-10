@@ -1,0 +1,2 @@
+*.user
+.conan/test_package/build

@@ -1,0 +1,79 @@
+language:
+- cpp
+- python
+
+dist: trusty
+sudo: false
+
+matrix:
+  include:
+  - os: linux
+    compiler: gcc
+    language: cpp
+    addons:
+      apt:
+        sources: ['ubuntu-toolchain-r-test']
+        packages: ['g++-6']
+    env: COMPILER=g++-6
+  - os: linux
+    compiler: clang
+    addons:
+      apt:
+        sources: ['ubuntu-toolchain-r-test', 'llvm-toolchain-trusty-4.0']
+        packages: ['clang-4.0', 'libstdc++-4.9-dev']
+    env: COMPILER=clang++-4.0
+  - os: osx
+    osx_image: xcode8.3
+    compiler: clang
+    language: cpp
+    env: COMPILER=clang++
+  - os: linux
+    compiler: gcc
+    language: cpp
+    addons:
+      apt:
+        sources: ['ubuntu-toolchain-r-test']
+        packages: ['g++-6']
+    env:
+      - C_COMPILER=gcc-6
+      - COMPILER=g++-6
+      - CXXFLAGS="-O0 --coverage -fno-inline -fno-inline-small-functions -fno-default-inline"
+    before_script:
+      - pip install --user cpp-coveralls
+    after_success:
+      - coveralls --gcov gcov-6 --gcov-options '\-lp' --root ${TRAVIS_BUILD_DIR} --build-root ${TRAVIS_BUILD_DIR}/build --extension cpp --extension hpp --exclude deps --include src
+  - os: linux
+    dist: xenial
+    sudo: true
+    language: python
+    python: "3.7"
+    services:
+      - docker
+    env:
+      - CONAN_GCC_VERSIONS=8
+      - CONAN_DOCKER_IMAGE=conanio/gcc8
+    install:
+      - pip install conan_package_tools
+    script:
+      - python .conan/build.py
+  allow_failures:
+  - language: python
+
+notifications:
+  email:
+    on_success: never
+    on_failure: always
+
+install:
+  - echo ${PATH}
+  - cmake --version
+  - export CC=${C_COMPILER}
+  - export CXX=${COMPILER}
+  - echo ${CXX}
+  - ${CXX} --version
+  - ${CXX} -v
+
+script:
+  - mkdir -p build && cd build
+  - cmake .. -DBUILD_TESTING=ON && make -j4
+  - CTEST_OUTPUT_ON_FAILURE=1 ctest -j4 -R uvw
