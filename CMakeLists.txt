@@ -25,6 +25,8 @@ else()
     add_definitions(-O2)
 endif()
 
+include_directories(vendor/uvw/src)
+
 find_library(BSON NAMES libbson-static-1.0.a)
 if (NOT BSON)
     # Got an error here and are on linux? the apt package doesn't have a static
@@ -45,9 +47,10 @@ endif()
 file(GLOB_RECURSE SOURCE src/*.c src/*.cpp)
 add_library(draconity SHARED ${SOURCE})
 # FIXME removed zydis from below, needs to be re-added but only for MacOS
-target_link_libraries(draconity m dl pthread ${BSON})
+target_link_libraries(draconity m dl pthread uv ${BSON})
 # FIXME needs to be hidden behind OS check
 #target_link_libraries(draconity -F/System/Library/PrivateFrameworks "-framework CoreSymbolication -framework AppKit")
+
 set_target_properties(draconity PROPERTIES
     CXX_STANDARD 17
     CXX_EXTENSIONS OFF
