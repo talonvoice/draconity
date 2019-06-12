@@ -233,8 +233,7 @@ void UvServer::run() {
     loop->run();
 }
 
-//TODO remove these arguments - don't think we need them anymore
-void draconity_transport_main(transport_msg_fn cb, const char *name) {
+void draconity_transport_main(transport_msg_fn callback) {
     std::thread networkThread([]{
         auto port = 8000;
         auto addr = "127.0.0.1";

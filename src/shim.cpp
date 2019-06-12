@@ -583,7 +583,7 @@ static void *draconity_install(void *_) {
         printf("[+] waiting for engine\n");
     }
 #endif //__APPLE__
-    draconity_init("dragon");
+    draconity_init();
     return NULL;
 }
 
