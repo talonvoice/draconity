@@ -4,6 +4,7 @@
 #include <bson.h>
 #include <memory>
 #include <mutex>
+#include <thread>
 #define __STDC_FORMAT_MACROS
 #include <inttypes.h>
 
@@ -232,17 +233,21 @@ void UvServer::run() {
     loop->run();
 }
 
+//TODO remove these arguments - don't think we need them anymore
 void draconity_transport_main(transport_msg_fn cb, const char *name) {
-    auto port = 8000;
-    auto addr = "127.0.0.1";
-    printf("[+] Server starting on %s:%i\n", addr, port);
-    UvServer server;
-    server.listen(addr, port);
-    server.startBroadcasting();
+    std::thread networkThread([]{
+        auto port = 8000;
+        auto addr = "127.0.0.1";
+        printf("[+] Server starting on %s:%i\n", addr, port);
+        UvServer server;
+        server.listen(addr, port);
+        server.startBroadcasting();
 
-    //TODO move below to a thread or something so it doesn't block the rest of draconity init
-    server.run();
-    printf("[+] Server done running (should not happen)\n");
+        //TODO move below to a thread or something so it doesn't block the rest of draconity init
+        server.run();
+        printf("[+] Server done running (should not happen)\n");
+    });
+    networkThread.detach();
 }
 
 void draconity_transport_publish(const char *topic, uint8_t *data, uint32_t size) {
