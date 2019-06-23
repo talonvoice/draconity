@@ -506,7 +506,7 @@ static bson_t *handle_message(const uint8_t *msg, uint32_t msglen) {
         bson_append_document_end(&grammars, &child);
 
         bson_append_array_end(doc, &grammars);
-#endif
+#endif //CPP_PORT_IS_DONE
 
         resp = doc;
     } else if (streq(cmd, "mimic")) {
