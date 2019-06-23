@@ -7,10 +7,6 @@
 #if USE_ZYDIS
 #include <Zydis/Zydis.h>
 #endif //USE_ZYDIS
-#if false //FIXME this seems to be unused?
-https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man3/asl.3.html
-#include <asl.h>
-#endif
 #include <bson.h>
 #include <dlfcn.h>
 #include <fcntl.h>
@@ -30,9 +26,6 @@ https://developer.apple.com/library/archive/documentation/System/Conceptual/ManP
 #include "draconity.h"
 #ifdef __APPLE__
 #include "CoreSymbolication.h"
-
-// used to hook IOPMAssertionDeclareUserActivity
-#include <IOKit/pwr_mgt/IOPMLib.h>
 #endif //__APPLE__
 
 #ifndef streq
@@ -65,8 +58,7 @@ typedef struct code_hook {
 code_hook *DSXEngine_New_hook = NULL,
           *DSXEngine_Create_hook = NULL,
           *DSXEngine_LoadGrammar_hook = NULL,
-          *DSXEngine_GetMicState_hook = NULL,
-          *IOPMAssertionDeclareUserActivity_hook = NULL;
+          *DSXEngine_GetMicState_hook = NULL;
 
 static void patch_write(void *addr, void *patch, size_t size) {
     uint64_t prot_size = (size + 0xfff) & ~0xfff;
@@ -460,17 +452,6 @@ static void walk_image(CSSymbolicatorRef csym, const char *image, code_hook *hoo
         load++;
     }
 }
-
-IOReturn (*_IOPMAssertionDeclareUserActivity)(CFStringRef AssertionName, IOPMUserActiveType userType, IOPMAssertionID *AssertionID) = NULL;
-IOReturn IOPMAssertionDeclareUserActivity(CFStringRef AssertionName, IOPMUserActiveType userType, IOPMAssertionID *AssertionID) {
-    if (prevent_wake) {
-        return 0;
-    }
-    hook_revert(IOPMAssertionDeclareUserActivity_hook);
-    IOReturn err = _IOPMAssertionDeclareUserActivity(AssertionName, userType, AssertionID);
-    hook_apply(IOPMAssertionDeclareUserActivity_hook);
-    return err;
-}
 #endif //__APPLE__
 
 #define h(_name) {.handle=NULL, .name=#_name, .target=_name, .offset=0, .active=false, 0}
@@ -480,7 +461,6 @@ static code_hook dragon_hooks[] = {
     ho(DSXEngine_Create, &DSXEngine_Create_hook),
     ho(DSXEngine_GetMicState, &DSXEngine_GetMicState_hook),
     ho(DSXEngine_LoadGrammar, &DSXEngine_LoadGrammar_hook),
-    ho(IOPMAssertionDeclareUserActivity, &IOPMAssertionDeclareUserActivity_hook),
     {0},
 };
 #undef h
@@ -575,8 +555,6 @@ static void *draconity_install(void *_) {
     CSSymbolicatorRef csym = CSSymbolicatorCreateWithTask(mach_task_self());
     walk_image(csym, "server.so", NULL, server_syms);
     walk_image(csym, "mrec.so", NULL, mrec_syms);
-    _IOPMAssertionDeclareUserActivity = dlsym(RTLD_NEXT, "IOPMAssertionDeclareUserActivity");
-    printf("%46s = %p\n", "_IOPMAssertionDeclareUserActivity", _IOPMAssertionDeclareUserActivity);
     walk_image(csym, image, dragon_hooks, NULL);
     CSRelease(csym);
     if (!_engine) {
