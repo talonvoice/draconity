@@ -1,12 +1,7 @@
 // FIXME temporarily nooped to get this thing to compile on linux
 // (needs to be replaced with cross platform shimming approach)
 
-// switch to allow toggling Zydis on/off (FIXME Zydis build hasn't been configured on Linux yet)
-#define USE_ZYDIS false
-
-#if USE_ZYDIS
 #include <Zydis/Zydis.h>
-#endif //USE_ZYDIS
 #include <bson.h>
 #include <dlfcn.h>
 #include <fcntl.h>
@@ -44,7 +39,7 @@ drg_engine *_engine = NULL;
 #include "api.h" // this defines the function pointers
 
 #define state draconity_state
-#if USE_ZYDIS
+
 typedef struct code_hook {
     struct code_hook **handle;
     const char *name;
@@ -75,7 +70,6 @@ static void hook_apply(code_hook *hook) {
 static void hook_revert(code_hook *hook) {
     patch_write(hook->addr, hook->orig, hook->size);
 }
-#endif //USE_ZYDIS
 
 #if RUN_IN_DRAGON
 int draconity_set_param(const char *key, const char *value) {
@@ -311,7 +305,6 @@ int DSXGrammar_RegisterPhraseHypothesisCallback(drg_grammar *grammar, void *cb, 
 }
 */
 
-#if USE_ZYDIS
 // patching code starts here
 static ZydisDecoder dis;
 static ZydisFormatter dis_fmt;
@@ -457,10 +450,12 @@ static void walk_image(CSSymbolicatorRef csym, const char *image, code_hook *hoo
 #define h(_name) {.handle=NULL, .name=#_name, .target=_name, .offset=0, .active=false, 0}
 #define ho(_name, _handle) {.handle=_handle, .name=#_name, .target=_name, .offset=0, .active=false, 0}
 static code_hook dragon_hooks[] = {
+#if RUN_IN_DRAGON
     ho(DSXEngine_New, &DSXEngine_New_hook),
     ho(DSXEngine_Create, &DSXEngine_Create_hook),
     ho(DSXEngine_GetMicState, &DSXEngine_GetMicState_hook),
     ho(DSXEngine_LoadGrammar, &DSXEngine_LoadGrammar_hook),
+#endif //RUN_IN_DRAGON
     {0},
 };
 #undef h
@@ -536,7 +531,6 @@ static symload mrec_syms[] = {
     {0},
 };
 #undef s
-#endif //USE_ZYDIS
 
 static void *draconity_install(void *_) {
     printf("[+] draconity starting\n");
