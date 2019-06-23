@@ -11,9 +11,7 @@ set(CMAKE_SKIP_BUILD_RPATH TRUE)
 set(CMAKE_BUILD_WITH_INSTALL_RPATH FALSE)
 
 link_directories(${CMAKE_LIBRARY_OUTPUT_DIRECTORY})
-#FIXME need to fork based on OS here - or just add both dirs?
-#include_directories(/usr/local/include/libbson-1.0)
-include_directories(/usr/include/libbson-1.0)
+include_directories(/usr/include/libbson-1.0 /usr/local/include/libbson-1.0)
 
 include_directories(src)
 if (ASAN)
@@ -24,8 +22,6 @@ if (DEBUG)
 else()
     add_definitions(-O2)
 endif()
-
-include_directories(vendor/uvw/src)
 
 find_library(BSON NAMES libbson-static-1.0.a)
 if (NOT BSON)
@@ -40,15 +36,20 @@ if (NOT BSON)
 endif()
 find_library(ZYDIS NAMES libzydis.a zydis Zydis)
 if (NOT ZYDIS)
-   message(FATAL_ERROR "libzydis not found")
+    message(FATAL_ERROR "libzydis not found")
 endif()
+find_library(UV NAMES uv)
+if (NOT UV)
+    message(FATAL_ERROR, "libuv not found")
+endif()
+include_directories(vendor/uvw/src)
 
 file(GLOB_RECURSE SOURCE src/*.c src/*.cpp)
 add_library(draconity SHARED ${SOURCE})
-# FIXME removed zydis from below, needs to be re-added but only for MacOS
-target_link_libraries(draconity m dl pthread uv ${BSON})
-# FIXME needs to be hidden behind OS check
-#target_link_libraries(draconity -F/System/Library/PrivateFrameworks "-framework CoreSymbolication -framework AppKit")
+target_link_libraries(draconity m dl pthread ${UV} ${ZYDIS} ${BSON})
+if(APPLE)
+    target_link_libraries(draconity -F/System/Library/PrivateFrameworks "-framework CoreSymbolication -framework AppKit")
+endif()
 
 set_target_properties(draconity PROPERTIES
     CXX_STANDARD 17
