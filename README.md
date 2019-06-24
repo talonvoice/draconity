@@ -53,8 +53,9 @@ Now Draconity should be buildable (you have to do an in-source build here too):
 
 ```
 cd draconity
-env CMAKE_LIBRARY_PATH=/home/caspar/src/libbson-1.9.2 cmake -DCMAKE_CXX_FLAGS:STRING=-fpermissive .
-make env LD_PRELOAD=lib/libdraconity.so sleep 5
+env CMAKE_LIBRARY_PATH=/home/caspar/src/libbson-1.9.2 cmake -DCMAKE_CXX_FLAGS:STRING="-fpermissive -fsanitize=address" .
+make -j8
+env LD_PRELOAD="/usr/lib/gcc/x86_64-linux-gnu/7/libasan.so lib/libdraconity.so" sleep 5
 ```
 
 You should see Draconity spew some output as it loads, then `sleep` will exit after 5 seconds. You can use the Python prototyping client at https://github.com/caspark/draconity-prototyping to verify the network transport works (`make pyclient`).
