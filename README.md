@@ -58,6 +58,8 @@ make -j8
 env LD_PRELOAD="/usr/lib/gcc/x86_64-linux-gnu/7/libasan.so lib/libdraconity.so" sleep 5
 ```
 
+If you are using an IDE, then you might want to also include `-DCMAKE_EXPORT_COMPILE_COMMANDS=1` in the cmake invocation (for example, Visual Studio code can use this to properly configure itself).
+
 You should see Draconity spew some output as it loads, then `sleep` will exit after 5 seconds. You can use the Python prototyping client at https://github.com/caspark/draconity-prototyping to verify the network transport works (`make pyclient`).
 
 Windows
