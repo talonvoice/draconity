@@ -22,12 +22,15 @@ typedef struct __attribute__((packed)) {
 
 #define BROADCAST_DELAY_MS 1000
 
-void dump_vector(std::vector<char> buffer) {
-    //FIXME can't use iostream in draconity due to using gcc's `__attribute__((constructor))`
-    // for (auto const& c : buffer) {
-    //     std::cout << std::hex << (int) c;
-    // }
-    // std::cout << std::dec << std::endl;
+void dump_data(char *data, size_t len) {
+    for (int i = 0; i < len; i++) {
+        printf("%x", (unsigned char)data[i]);
+    }
+    printf("\n");
+}
+
+void dump_data(std::vector<char> buffer) {
+    dump_data(buffer.data(), buffer.size());
 }
 
 class UvClient {
@@ -42,33 +45,43 @@ class UvClient {
 
     void onData(const uvw::DataEvent &event, uvw::TCPHandle &client) {
         if (NETWORK_DEBUG) {
-            printf("[+] Draconity transport: client on data %zu\n", event.length);
+            printf("[-] Draconity transport: client on data start, receiving %zu bytes into recv buffer\n",
+                   event.length);
         }
         lock.lock();
         auto data = &event.data[0];
         recv_buffer.insert(recv_buffer.end(), data, data + event.length);
-        if (NETWORK_DEBUG) {
-            dump_vector(recv_buffer);
-        }
+
 
         while (true) {
+            if (NETWORK_DEBUG) {
+                printf("[-] Draconity transport: have %zu bytes in recv buffer:\n", recv_buffer.size());
+                dump_data(recv_buffer);
+            }
             if (!received_header) {
                 if (recv_buffer.size() >= sizeof(MessageHeader)) {
                     uint32_t *recv_buffer_start = reinterpret_cast<uint32_t *>(recv_buffer.data());
                     received_header = std::optional(MessageHeader{
                         .tid = htonl(recv_buffer_start[0]),
                         .length = htonl(recv_buffer_start[1])});
-                    if (NETWORK_DEBUG) {
-                        printf("[+] Draconity transport: read tid %" PRIu32 " and len %" PRIu32 "\n",
-                               received_header->tid, received_header->length);
-                        dump_vector(recv_buffer);
-                    }
                     recv_buffer.erase(recv_buffer.begin(), recv_buffer.begin() + sizeof(MessageHeader));
+                    if (NETWORK_DEBUG) {
+                        printf("[-] Draconity transport: read tid %" PRIu32 " and len %" PRIu32
+                               ", %zu bytes left in recv buffer:\n",
+                               received_header->tid, received_header->length, recv_buffer.size());
+                        dump_data(recv_buffer);
+                    }
+                } else {
+                    if (NETWORK_DEBUG) {
+                        printf("[-] Draconity transport: not enough bytes in read buffer to read header\n");
+                        dump_data(recv_buffer);
+                    }
                 }
             }
             if (received_header && recv_buffer.size() >= received_header->length) {
                 if (NETWORK_DEBUG) {
-                    printf("[+] Draconity transport: received message: tid=%" PRIu32 " len=%" PRIu32 "\n",
+                    printf("[-] Draconity transport: reading msg for tid=%" PRIu32
+                           " by parsing %" PRIu32 " bytes of BSON from recv buffer\n",
                            received_header->tid, received_header->length);
                 }
                 uint8_t *buff_start = reinterpret_cast<uint8_t *>(&recv_buffer[0]);
@@ -87,7 +100,8 @@ class UvClient {
                 if (bson_iter_init(&iter, b)) {
                     while (bson_iter_next(&iter)) {
                         const char *key = bson_iter_key(&iter);
-                        printf("[+] Draconity transport: bson parsing found element key: \"%s\" of type %#04x\n", bson_iter_key(&iter), bson_iter_type(&iter));
+                        printf("[-] Draconity transport: BSON parsing found element key: \"%s\" of type %#04x\n",
+                               bson_iter_key(&iter), bson_iter_type(&iter));
                         if (streq(key, "m") && BSON_ITER_HOLDS_UTF8(&iter)) {
                             method = bson_iter_dup_utf8(&iter, NULL);
                         } else if (streq(key, "c") && BSON_ITER_HOLDS_INT32(&iter)) {
@@ -97,18 +111,22 @@ class UvClient {
                 }
                 bson_destroy(b);
                 recv_buffer.erase(recv_buffer.begin(), recv_buffer.begin() + received_header->length);
+                if (NETWORK_DEBUG) {
+                    printf("[+] Draconity transport: done parsing message: tid=%" PRIu32 " len=%" PRIu32
+                           ", %zu bytes left in recv buffer:\n",
+                           received_header->tid, received_header->length, recv_buffer.size());
+                    dump_data(recv_buffer);
+                }
 
                 bson_t reply = BSON_INITIALIZER;
-                if
-                    streq(method, "ping") {
-                        printf("[+] Draconity ping/pong: recognized ping! Received counter is %" PRIi32 "\n", counter);
-                        counter++;
-                        printf("[+] Draconity ping/pong: sending ping back! New counter is %" PRIi32 "\n", counter);
+                if streq(method, "ping") {
+                    printf("[+] Draconity ping/pong: recognized ping! Received counter is %" PRIi32 "\n", counter);
+                    counter++;
+                    printf("[+] Draconity ping/pong: sending ping back! New counter is %" PRIi32 "\n", counter);
 
-                        BSON_APPEND_UTF8(&reply, "m", "pong");
-                        BSON_APPEND_INT32(&reply, "c", counter);
-                    }
-                else {
+                    BSON_APPEND_UTF8(&reply, "m", "pong");
+                    BSON_APPEND_INT32(&reply, "c", counter);
+                } else {
                     printf("[+] Draconity ping/pong: unrecognized method: '%s'\n", method);
                 }
 
@@ -118,18 +136,16 @@ class UvClient {
                 free(reply_data);
 
                 received_header = {};
-            } else if (received_header) {
-                // we have a header but the message we're about to receive is too large for our
-                // receive buffer - bail out.
-                printf("[!] Draconity transport: received a header indicating %" PRIu32
-                       " bytes of data, but receive buffer is too small - dropping message!\n",
-                       received_header->length);
             } else {
+                // we haven't got enough data to parse the body yet
                 break;
             }
         }
 
         lock.unlock();
+        if (NETWORK_DEBUG) {
+            printf("[-] Draconity transport: client on data finished\n");
+        }
     }
 
     // Write `msg_len` bytes of `msg` to the client as a published message (i.e. not in
@@ -164,10 +180,15 @@ class UvClient {
         header->length = ntohl(msg_len);
         std::memcpy(&data_to_write.get()[sizeof(MessageHeader)], msg, msg_len);
 
+        if (NETWORK_DEBUG) {
+            printf("[-] Draconity transport: queuing %zu bytes of data for sending to client:\n", frame_size);
+            dump_data(&data_to_write.get()[0], frame_size);
+        }
+
         tcp->write(std::move(data_to_write), frame_size);
 
         if (NETWORK_DEBUG) {
-            printf("[+] Draconity transport: sent data to client; total bytes=%zu\n", frame_size);
+            printf("[-] Draconity transport: queued %zu bytes of data for sending to client\n", frame_size);
         }
     }
 };
