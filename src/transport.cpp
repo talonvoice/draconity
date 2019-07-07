@@ -245,7 +245,9 @@ void UvServer::publish(const uint8_t *msg, size_t length) {
     //FIXME callers should free `msg`?
 }
 
-//FIXME this probably needs to be some kind of atomic or lock?
+// `started_server` is initialized in a separate thread, so we should only read it
+// while `started_server_lock` is locked.
+std::mutex started_server_lock;
 UvServer *started_server = nullptr;
 
 void draconity_transport_main(transport_msg_fn callback) {
@@ -254,10 +256,12 @@ void draconity_transport_main(transport_msg_fn callback) {
         auto addr = "127.0.0.1";
         printf("[+] Draconity transport: server starting on %s:%i\n", addr, port);
 
+        started_server_lock.lock();
         UvServer server;
         server.listen(addr, port);
         server.startBroadcasting();
         started_server = &server;
+        started_server_lock.unlock();
 
         server.run();
         printf("[!] Draconity transport: server finished running (should not happen!)\n");
@@ -267,11 +271,13 @@ void draconity_transport_main(transport_msg_fn callback) {
 
 //TODO actually we don't care about this topic anymore - remove it
 void draconity_transport_publish(const char *topic, uint8_t *data, uint32_t size) {
-    while (started_server == nullptr) {
-        if (NETWORK_DEBUG) printf("[+] Draconity publish is waiting for network loop to start\n");
-        usleep(1 * 1000 * 1000); // FIXME hackety hack - would be better to block on a lock?
+    started_server_lock.lock();
+    if (started_server == nullptr) {
+        if (NETWORK_DEBUG) printf("[+] Draconity publish: dropping message because server hasn't started yet\n");
+    } else {
+        printf("[+] Draconity publish: attempting to publish on topic '%s'\n", topic);
+        started_server->publish(data, size);
+        printf("[+] Draconity publish: done publishing on topic '%s'\n", topic);
     }
-    printf("[+] Draconity attempting to publish on topic '%s'\n", topic);
-    started_server->publish(data, size);
-    printf("[+] Draconity done publishing on topic '%s'\n", topic);
+    started_server_lock.unlock();
 }
