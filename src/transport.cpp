@@ -103,6 +103,7 @@ class UvClient {
                     uint32_t reply_length;
                     uint8_t *reply_data = bson_destroy_with_steal(&reply, true, &reply_length);
                     write_message(msg_tid, reply_data, reply_length);
+                    free(reply_data);
 
                     msg_tid = 0;
                     msg_len = 0;
@@ -114,7 +115,10 @@ class UvClient {
             lock.unlock();
         }
 
-        void publish(uint8_t *msg, size_t length) {
+        // Write `length` bytes of `msg` to the client as a published message (i.e. not in
+        // response to an incoming message).
+        // Callers are responsible for freeing any data pointed at by `msg` afterwards.
+        void publish(const uint8_t *msg, const size_t length) {
             write_message(PUBLISH_TID, msg, length);
         }
 
@@ -126,13 +130,29 @@ class UvClient {
         uint32_t msg_tid = 0;
         uint32_t msg_len = 0;
 
-        void write_message(uint32_t tid, uint8_t *msg, size_t length) {
+        // Write `length` bytes of `msg` to the client using the given transaction id of `tid`.
+        // Callers are responsible for freeing any data pointed at by `msg` afterwards.
+        void write_message(const uint32_t tid, const uint8_t *msg, const size_t length) {
+            // We jump through a bunch of hoops to have `unique_ptr`s to pass into uvw, so that
+            // it takes care of freeing the memory for these once it's done.
+            // There's gotta be a less verbose way of doing this, but for now this works.
             uint32_t tid_network = ntohl(tid);
+            uint32_t *tid_network_mem = new uint32_t[1];
+            *tid_network_mem = tid_network;
+            std::unique_ptr<char[]> tid_network_ptr(reinterpret_cast<char *>(tid_network_mem));
+
             uint32_t length_network = ntohl(length);
-            //FIXME writes below don't take ownership. Need to pass unique pointers instead?
-            tcp->write(reinterpret_cast<char *>(&tid_network), sizeof(uint32_t));
-            tcp->write(reinterpret_cast<char *>(&length_network), sizeof(uint32_t));
-            tcp->write(reinterpret_cast<char *>(msg), length);
+            uint32_t *length_network_mem = new uint32_t[1];
+            *length_network_mem = length_network;
+            std::unique_ptr<char[]> length_network_ptr(reinterpret_cast<char *>(length_network_mem));
+
+            uint8_t *msg_mem = new uint8_t[length];
+            std::memcpy(msg_mem, msg, length);
+            std::unique_ptr<char[]> msg_ptr(reinterpret_cast<char *>(msg_mem));
+
+            tcp->write(std::move(tid_network_ptr), sizeof(uint32_t));
+            tcp->write(std::move(length_network_ptr), sizeof(uint32_t));
+            tcp->write(std::move(msg_ptr), length);
             if (NETWORK_DEBUG) printf("[+] Draconity transport: sent data to client; total bytes=%zu\n", sizeof(uint32_t) * 2 + length);
         }
 };
@@ -213,12 +233,13 @@ void UvServer::startBroadcasting() {
 
     timer->on<uvw::TimerEvent>([this](const uvw::TimerEvent &event, uvw::TimerHandle &timer) {
         uint64_t time_now = std::chrono::milliseconds(loop->now()).count();
-        if (NETWORK_DEBUG) printf("[+] Draconity time broadcaster: sending broadcast happened! Time is %" PRIu64 "\n", time_now);
+        if (NETWORK_DEBUG) printf("[+] Draconity time broadcaster: it's time to send a broadcast! Time is %" PRIu64 "\n", time_now);
 
         bson_t *b = BCON_NEW("m", BCON_UTF8("time"), "time", BCON_INT64(time_now));
         uint32_t length;
         uint8_t *msg = bson_destroy_with_steal(b, true, &length);
         publish(msg, length);
+        free(msg);
     });
 
     timer->start(std::chrono::milliseconds(BROADCAST_DELAY_MS), std::chrono::milliseconds(BROADCAST_DELAY_MS));
@@ -228,21 +249,24 @@ void UvServer::run() {
     loop->run();
 }
 
-void UvServer::publish(const uint8_t *msg, size_t length) {
+void UvServer::publish(const uint8_t *msg, const size_t length) {
     lock.lock();
     for (auto const& client : clients) {
-        uint8_t *msg_copy = new uint8_t[length];
-        std::memcpy(msg_copy, msg, length);
-
-        //FIXME: it's supposedly not save to call anything in libuv from outside
+        //FIXME: it's supposedly not safe to call anything in libuv from outside
         // the thread running the event loop - so probably we should do something like
         // auto handle = loop->resource<uvw::AsyncHandle>()
         // and then use that to signal that there's a buffer of data to be drained
         // somewhere?
-        client->publish(msg_copy, length);
+        client->publish(msg, length);
+    }
+    if (NETWORK_DEBUG) {
+        if (clients.size() == 0) {
+            printf("[+] Draconity transport: no clients connected so publish message was dropped\n");
+        } else {
+            printf("[+] Draconity transport: published message to %zu clients\n", clients.size());
+        }
     }
     lock.unlock();
-    //FIXME callers should free `msg`?
 }
 
 // `started_server` is initialized in a separate thread, so we should only read it
@@ -254,7 +278,7 @@ void draconity_transport_main(transport_msg_fn callback) {
     std::thread networkThread([]{
         auto port = 8000;
         auto addr = "127.0.0.1";
-        printf("[+] Draconity transport: server starting on %s:%i\n", addr, port);
+        printf("[+] Draconity transport: TCP server starting on %s:%i\n", addr, port);
 
         started_server_lock.lock();
         UvServer server;
@@ -264,7 +288,7 @@ void draconity_transport_main(transport_msg_fn callback) {
         started_server_lock.unlock();
 
         server.run();
-        printf("[!] Draconity transport: server finished running (should not happen!)\n");
+        printf("[!] Draconity transport: TCP server finished running (should not happen!)\n");
     });
     networkThread.detach();
 }
@@ -277,7 +301,7 @@ void draconity_transport_publish(const char *topic, uint8_t *data, uint32_t size
     } else {
         printf("[+] Draconity publish: attempting to publish on topic '%s'\n", topic);
         started_server->publish(data, size);
-        printf("[+] Draconity publish: done publishing on topic '%s'\n", topic);
     }
     started_server_lock.unlock();
+    free(data);
 }

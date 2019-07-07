@@ -1,5 +1,4 @@
-// FIXME temporarily nooped to get this thing to compile on linux
-// (needs to be replaced with cross platform shimming approach)
+// TODO needs to be replaced with cross platform shimming approach
 
 #include <Zydis/Zydis.h>
 #include <bson.h>
