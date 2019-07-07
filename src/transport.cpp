@@ -115,11 +115,11 @@ class UvClient {
             lock.unlock();
         }
 
-        // Write `length` bytes of `msg` to the client as a published message (i.e. not in
+        // Write `msg_len` bytes of `msg` to the client as a published message (i.e. not in
         // response to an incoming message).
         // Callers are responsible for freeing any data pointed at by `msg` afterwards.
-        void publish(const uint8_t *msg, const size_t length) {
-            write_message(PUBLISH_TID, msg, length);
+        void publish(const uint8_t *msg, const size_t msg_len) {
+            write_message(PUBLISH_TID, msg, msg_len);
         }
 
     private:
@@ -130,30 +130,25 @@ class UvClient {
         uint32_t msg_tid = 0;
         uint32_t msg_len = 0;
 
-        // Write `length` bytes of `msg` to the client using the given transaction id of `tid`.
+        // Write `msg_len` bytes of `msg` to the client using the given transaction id of `tid`.
         // Callers are responsible for freeing any data pointed at by `msg` afterwards.
-        void write_message(const uint32_t tid, const uint8_t *msg, const size_t length) {
-            // We jump through a bunch of hoops to have `unique_ptr`s to pass into uvw, so that
-            // it takes care of freeing the memory for these once it's done.
-            // There's gotta be a less verbose way of doing this, but for now this works.
-            uint32_t tid_network = ntohl(tid);
-            uint32_t *tid_network_mem = new uint32_t[1];
-            *tid_network_mem = tid_network;
-            std::unique_ptr<char[]> tid_network_ptr(reinterpret_cast<char *>(tid_network_mem));
+        void write_message(const uint32_t tid, const uint8_t *msg, const size_t msg_len) {
+            // We jump through some hoops to allocate a new chunk of memory pointed to by a
+            // `unique_ptr` (and then we pass that into uvw), so that uvw takes care of freeing
+            // memory once libuv is done with actually sending the data.
+            size_t header_size = sizeof(uint32_t)*2;
+            size_t frame_size = header_size + msg_len;
+            std::unique_ptr<char[]> data_to_write = std::make_unique<char[]>(frame_size);
 
-            uint32_t length_network = ntohl(length);
-            uint32_t *length_network_mem = new uint32_t[1];
-            *length_network_mem = length_network;
-            std::unique_ptr<char[]> length_network_ptr(reinterpret_cast<char *>(length_network_mem));
+            uint32_t *data_as_ints = reinterpret_cast<uint32_t*>(&data_to_write.get()[0]);
+            data_as_ints[0] = ntohl(tid);
+            data_as_ints[1] = ntohl(msg_len);
 
-            uint8_t *msg_mem = new uint8_t[length];
-            std::memcpy(msg_mem, msg, length);
-            std::unique_ptr<char[]> msg_ptr(reinterpret_cast<char *>(msg_mem));
+            std::memcpy(&data_to_write.get()[header_size], msg, msg_len);
 
-            tcp->write(std::move(tid_network_ptr), sizeof(uint32_t));
-            tcp->write(std::move(length_network_ptr), sizeof(uint32_t));
-            tcp->write(std::move(msg_ptr), length);
-            if (NETWORK_DEBUG) printf("[+] Draconity transport: sent data to client; total bytes=%zu\n", sizeof(uint32_t) * 2 + length);
+            tcp->write(std::move(data_to_write), frame_size);
+
+            if (NETWORK_DEBUG) printf("[+] Draconity transport: sent data to client; total bytes=%zu\n", frame_size);
         }
 };
 
