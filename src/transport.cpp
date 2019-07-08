@@ -8,7 +8,10 @@
 #include <cstring>
 #include <inttypes.h>
 
+// set NETWORK_DEBUG to true to see detailed transport debugging information
 #define NETWORK_DEBUG true
+// set NETWORK_DEBUG_DATA to true to output dumps of data sent/received
+#define NETWORK_DEBUG_DATA false
 
 #ifndef streq
 #define streq(a, b) (!strcmp(a, b))
@@ -22,15 +25,59 @@ typedef struct __attribute__((packed)) {
 
 #define BROADCAST_DELAY_MS 1000
 
-void dump_data(char *data, size_t len) {
-    for (int i = 0; i < len; i++) {
-        printf("%x", (unsigned char)data[i]);
+// Dump bytes as hex, courtesy of https://gist.github.com/domnikl/af00cc154e3da1c5d965
+void dump_data(const char* label, char *data, size_t len) {
+    if (NETWORK_DEBUG_DATA) {
+        unsigned char buff[17] = {0};
+        unsigned char *pc = (unsigned char *)data;
+
+        if (label != NULL && label != nullptr) {
+            printf ("%s:\n", label);
+        }
+        if (len == 0) {
+            printf("  (zero bytes)\n");
+            return;
+        }
+
+        int i;
+        for (i = 0; i < len; i++) {
+            // Multiple of 16 means new line (with line offset).
+            if ((i % 16) == 0) {
+                // Just don't print ASCII for the zeroth line.
+                if (i != 0) {
+                    printf("  %s\n", buff);
+                }
+
+                // Output the offset.
+                printf("  %04x ", i);
+            }
+
+            // Now the hex code for the specific character.
+            printf(" %02x", pc[i]);
+
+            // And store a printable ASCII character for later.
+            if ((pc[i] < 0x20) || (pc[i] > 0x7e)) {
+                buff[i % 16] = '.';
+            } else {
+                buff[i % 16] = pc[i];
+            }
+
+            buff[(i % 16) + 1] = '\0';
+        }
+
+        // Pad out last line if not exactly 16 characters.
+        while ((i % 16) != 0) {
+            printf("   ");
+            i++;
+        }
+
+        // And print the final ASCII bit.
+        printf("  %s\n", buff);
     }
-    printf("\n");
 }
 
-void dump_data(std::vector<char> buffer) {
-    dump_data(buffer.data(), buffer.size());
+void dump_data(const char *label, std::vector<char> buffer) {
+    dump_data(label, buffer.data(), buffer.size());
 }
 
 class UvClient {
@@ -55,8 +102,8 @@ class UvClient {
 
         while (true) {
             if (NETWORK_DEBUG) {
-                printf("[-] Draconity transport: have %zu bytes in recv buffer:\n", recv_buffer.size());
-                dump_data(recv_buffer);
+                printf("[-] Draconity transport: have %zu bytes in recv buffer\n", recv_buffer.size());
+                dump_data("recv_buffer", recv_buffer);
             }
             if (!received_header) {
                 if (recv_buffer.size() >= sizeof(MessageHeader)) {
@@ -67,15 +114,16 @@ class UvClient {
                     recv_buffer.erase(recv_buffer.begin(), recv_buffer.begin() + sizeof(MessageHeader));
                     if (NETWORK_DEBUG) {
                         printf("[-] Draconity transport: read tid %" PRIu32 " and len %" PRIu32
-                               ", %zu bytes left in recv buffer:\n",
+                               ", %zu bytes left in recv buffer\n",
                                received_header->tid, received_header->length, recv_buffer.size());
-                        dump_data(recv_buffer);
+                        dump_data("recv_buffer", recv_buffer);
                     }
                 } else {
                     if (NETWORK_DEBUG) {
-                        printf("[-] Draconity transport: not enough bytes in read buffer to read header\n");
-                        dump_data(recv_buffer);
+                        printf("[ ] Draconity transport: not enough bytes in recv buffer to read"
+                               "%zu bytes of header\n", sizeof(MessageHeader));
                     }
+                    break;
                 }
             }
             if (received_header && recv_buffer.size() >= received_header->length) {
@@ -113,9 +161,9 @@ class UvClient {
                 recv_buffer.erase(recv_buffer.begin(), recv_buffer.begin() + received_header->length);
                 if (NETWORK_DEBUG) {
                     printf("[+] Draconity transport: done parsing message: tid=%" PRIu32 " len=%" PRIu32
-                           ", %zu bytes left in recv buffer:\n",
+                           ", %zu bytes left in recv buffer\n",
                            received_header->tid, received_header->length, recv_buffer.size());
-                    dump_data(recv_buffer);
+                    dump_data("recv_buffer", recv_buffer);
                 }
 
                 bson_t reply = BSON_INITIALIZER;
@@ -136,8 +184,12 @@ class UvClient {
                 free(reply_data);
 
                 received_header = {};
-            } else {
+            } else if (received_header) {
                 // we haven't got enough data to parse the body yet
+                if (NETWORK_DEBUG) {
+                        printf("[ ] Draconity transport: not enough bytes in recv buffer to read"
+                               "%" PRIi32 " bytes of message body\n", received_header->length);
+                    }
                 break;
             }
         }
@@ -181,15 +233,11 @@ class UvClient {
         std::memcpy(&data_to_write.get()[sizeof(MessageHeader)], msg, msg_len);
 
         if (NETWORK_DEBUG) {
-            printf("[-] Draconity transport: queuing %zu bytes of data for sending to client:\n", frame_size);
-            dump_data(&data_to_write.get()[0], frame_size);
+            printf("[-] Draconity transport: queuing %zu bytes of data for sending to client\n", frame_size);
+            dump_data("data_to_write", &data_to_write.get()[0], frame_size);
         }
 
         tcp->write(std::move(data_to_write), frame_size);
-
-        if (NETWORK_DEBUG) {
-            printf("[-] Draconity transport: queued %zu bytes of data for sending to client\n", frame_size);
-        }
     }
 };
 
