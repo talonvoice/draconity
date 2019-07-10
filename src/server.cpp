@@ -122,7 +122,7 @@ static bson_t *handle_message(const uint8_t *msg, uint32_t msglen) {
     Grammar *grammar = NULL;
     char *cmd = NULL, *name = NULL, *list = NULL, *main_rule = NULL;
     bool enabled = false, exclusive = false;
-    int priority = 0;
+    int priority = 0, counter;
     bool has_enabled = false, has_exclusive = false, has_priority = false;
 
     const uint8_t *items_buf = NULL, *data_buf = NULL, *phrase_buf = NULL, *words_buf;
@@ -163,6 +163,8 @@ static bson_t *handle_message(const uint8_t *msg, uint32_t msglen) {
                 bson_iter_array(&iter, &words_len, &words_buf);
             } else if (streq(key, "data") && BSON_ITER_HOLDS_BINARY(&iter)) {
                 bson_iter_binary(&iter, NULL, &data_len, &data_buf);
+            } else if (streq(key, "pingpong-counter") && BSON_ITER_HOLDS_INT32(&iter)) {
+                counter = bson_iter_int32(&iter);
             }
         }
     }
@@ -172,8 +174,16 @@ static bson_t *handle_message(const uint8_t *msg, uint32_t msglen) {
         errmsg = "missing or broken cmd field";
         goto end;
     }
+    if (streq(cmd, "ping")) {
+        printf("[+] Draconity ping/pong: recognized ping! Received counter is %" PRIi32
+               "; responding with %" PRIi32 "\n", counter, counter + 1);
+        counter++;
+        bson_t *response = bson_new();
+        BSON_APPEND_UTF8(response, "cmd", "pong");
+        BSON_APPEND_INT32(response, "pingpong-counter", counter);
+        resp = response;
 #if RUN_IN_DRAGON
-    if (cmd[0] == 'w') {
+    } else if (cmd[0] == 'w') {
         if (!draconity->ready) goto not_ready;
         if (!_DSXEngine_EnumWords ||
                 !_DSXWordEnum_Next ||
@@ -566,10 +576,10 @@ static bson_t *handle_message(const uint8_t *msg, uint32_t msglen) {
             goto end;
         }
         resp = success_msg();
+#endif //RUN_IN_DRAGON
     } else {
         goto unsupported_command;
     }
-#endif //RUN_IN_DRAGON
     bson_t *pub;
 end:
     free(cmd);

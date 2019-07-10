@@ -82,8 +82,9 @@ void dump_data(const char *label, std::vector<char> buffer) {
 
 class UvClient {
   public:
-    UvClient(std::shared_ptr<uvw::TCPHandle> tcp) {
+    UvClient(std::shared_ptr<uvw::TCPHandle> tcp, transport_msg_fn callback) {
         this->tcp = tcp;
+        this->handle_message_callback = callback;
     }
 
     void onEnd(const uvw::EndEvent &, uvw::TCPHandle &client) {
@@ -132,54 +133,13 @@ class UvClient {
                            " by parsing %" PRIu32 " bytes of BSON from recv buffer\n",
                            received_header->tid, received_header->length);
                 }
+
                 uint8_t *buff_start = reinterpret_cast<uint8_t *>(&recv_buffer[0]);
-
-                char *method = NULL;
-                int32_t counter = 0;
-
-                bson_t *b;
-                b = bson_new_from_data(buff_start, received_header->length);
-                if (!b) {
-                    printf("[!] Draconity transport: length communicated by protocol did not match length embedded in BSON object!\n");
-                    //TODO some kind of error handling? maybe need to free some memory?
-                    return;
-                }
-                bson_iter_t iter;
-                if (bson_iter_init(&iter, b)) {
-                    while (bson_iter_next(&iter)) {
-                        const char *key = bson_iter_key(&iter);
-                        printf("[-] Draconity transport: BSON parsing found element key: \"%s\" of type %#04x\n",
-                               bson_iter_key(&iter), bson_iter_type(&iter));
-                        if (streq(key, "m") && BSON_ITER_HOLDS_UTF8(&iter)) {
-                            method = bson_iter_dup_utf8(&iter, NULL);
-                        } else if (streq(key, "c") && BSON_ITER_HOLDS_INT32(&iter)) {
-                            counter = bson_iter_int32(&iter);
-                        }
-                    }
-                }
-                bson_destroy(b);
+                bson_t *reply = handle_message_callback(buff_start, received_header->length);
                 recv_buffer.erase(recv_buffer.begin(), recv_buffer.begin() + received_header->length);
-                if (NETWORK_DEBUG) {
-                    printf("[+] Draconity transport: done parsing message: tid=%" PRIu32 " len=%" PRIu32
-                           ", %zu bytes left in recv buffer\n",
-                           received_header->tid, received_header->length, recv_buffer.size());
-                    dump_data("recv_buffer", recv_buffer);
-                }
-
-                bson_t reply = BSON_INITIALIZER;
-                if streq(method, "ping") {
-                    printf("[+] Draconity ping/pong: recognized ping! Received counter is %" PRIi32 "\n", counter);
-                    counter++;
-                    printf("[+] Draconity ping/pong: sending ping back! New counter is %" PRIi32 "\n", counter);
-
-                    BSON_APPEND_UTF8(&reply, "m", "pong");
-                    BSON_APPEND_INT32(&reply, "c", counter);
-                } else {
-                    printf("[+] Draconity ping/pong: unrecognized method: '%s'\n", method);
-                }
 
                 uint32_t reply_length;
-                uint8_t *reply_data = bson_destroy_with_steal(&reply, true, &reply_length);
+                uint8_t *reply_data = bson_destroy_with_steal(reply, true, &reply_length);
                 write_message(received_header->tid, reply_data, reply_length);
                 free(reply_data);
 
@@ -208,6 +168,7 @@ class UvClient {
     }
 
   private:
+    transport_msg_fn handle_message_callback;
     std::shared_ptr<uvw::TCPHandle> tcp;
     std::vector<char> recv_buffer;
     std::mutex lock;
@@ -243,7 +204,7 @@ class UvClient {
 
 class UvServer {
   public:
-    UvServer();
+    UvServer(transport_msg_fn callback);
     ~UvServer();
     void listen(const char *host, int port);
     void startBroadcasting();
@@ -252,12 +213,14 @@ class UvServer {
     void publish(const uint8_t *msg, size_t length);
 
   private:
+    transport_msg_fn handle_message_callback;
     std::list<std::shared_ptr<UvClient>> clients;
     std::shared_ptr<uvw::Loop> loop;
     std::mutex lock;
 };
 
-UvServer::UvServer() {
+UvServer::UvServer(transport_msg_fn callback) {
+    handle_message_callback = callback;
     if (NETWORK_DEBUG) {
         printf("[+] Draconity transport: creating libuv event loop\n");
     }
@@ -281,7 +244,7 @@ void UvServer::listen(const char *host, int port) {
         uvw::Addr peer = tcpClient->peer();
         printf("[+] Draconity transport: accepted connection on socket %s:%u\n", peer.ip.c_str(), peer.port);
 
-        auto client = std::make_shared<UvClient>(tcpClient);
+        auto client = std::make_shared<UvClient>(tcpClient, handle_message_callback);
         tcpClient->on<uvw::CloseEvent>([this, client](const uvw::CloseEvent &, uvw::TCPHandle &tcpClient) {
             uvw::Addr peer = tcpClient.peer();
             if (NETWORK_DEBUG) {
@@ -330,7 +293,7 @@ void UvServer::startBroadcasting() {
             printf("[+] Draconity time broadcaster: it's time to send a broadcast! Time is %" PRIu64 "\n", time_now);
         }
 
-        bson_t *b = BCON_NEW("m", BCON_UTF8("time"), "time", BCON_INT64(time_now));
+        bson_t *b = BCON_NEW("cmd", BCON_UTF8("time"), "time", BCON_INT64(time_now));
         uint32_t length;
         uint8_t *msg = bson_destroy_with_steal(b, true, &length);
         publish(msg, length);
@@ -370,13 +333,13 @@ std::mutex started_server_lock;
 UvServer *started_server = nullptr;
 
 void draconity_transport_main(transport_msg_fn callback) {
-    std::thread networkThread([] {
+    std::thread networkThread([callback] {
         auto port = 8000;
         auto addr = "127.0.0.1";
         printf("[+] Draconity transport: TCP server starting on %s:%i\n", addr, port);
 
         started_server_lock.lock();
-        UvServer server;
+        UvServer server(callback);
         server.listen(addr, port);
         server.startBroadcasting();
         started_server = &server;
