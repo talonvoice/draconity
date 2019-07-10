@@ -202,6 +202,11 @@ class UvClient {
     }
 };
 
+typedef struct {
+    uint8_t *msg;
+    size_t length;
+} PublishableMessage;
+
 class UvServer {
   public:
     UvServer(transport_msg_fn callback);
@@ -210,28 +215,46 @@ class UvServer {
     void startBroadcasting();
     void run();
 
-    void publish(const uint8_t *msg, size_t length);
+    void publish(uint8_t *msg, size_t length);
 
   private:
+    void drain_publish_queue();
+
     transport_msg_fn handle_message_callback;
     std::list<std::shared_ptr<UvClient>> clients;
+    std::list<PublishableMessage> publish_queue;
     std::shared_ptr<uvw::Loop> loop;
-    std::mutex lock;
+    std::shared_ptr<uvw::AsyncHandle> check_publish_queue_handle;
+    std::mutex lock; // protects access to both `clients` and `publish_queue`
 };
 
 UvServer::UvServer(transport_msg_fn callback) {
     handle_message_callback = callback;
     if (NETWORK_DEBUG) {
-        printf("[+] Draconity transport: creating libuv event loop\n");
+        printf("[+] Draconity transport: creating libuv event loop machinery\n");
     }
     loop = uvw::Loop::create();
+
+    check_publish_queue_handle = loop->resource<uvw::AsyncHandle>();
+    check_publish_queue_handle->on<uvw::AsyncEvent>([this](const auto &, auto &hndl) {
+        printf("[ ] Draconity transport: received async event for checking publish queue\n");
+        this->drain_publish_queue();
+    });
+    check_publish_queue_handle->on<uvw::ErrorEvent>([](const auto &, auto &) {
+        printf("[!] Draconity transport: received error event for checking publish queue!");
+    });
+
     if (NETWORK_DEBUG) {
-        printf("[+] Draconity transport: done creating libuv loop\n");
+        printf("[+] Draconity transport: done creating libuv loop machinery\n");
     }
 }
 
 UvServer::~UvServer() {
     loop->stop();
+
+    // async handles can keep libuv loops alive apparently: https://stackoverflow.com/a/13844553/775982
+    check_publish_queue_handle->close();
+
     // TODO: figure out if we actually need to call this close
     loop->close();
 }
@@ -297,7 +320,6 @@ void UvServer::startBroadcasting() {
         uint32_t length;
         uint8_t *msg = bson_destroy_with_steal(b, true, &length);
         publish(msg, length);
-        free(msg);
     });
 
     timer->start(std::chrono::milliseconds(BROADCAST_DELAY_MS), std::chrono::milliseconds(BROADCAST_DELAY_MS));
@@ -307,21 +329,41 @@ void UvServer::run() {
     loop->run();
 }
 
-void UvServer::publish(const uint8_t *msg, const size_t length) {
+// Send the `msg` of the length `length` to all connected clients.
+// Takes ownership of the memory pointed to by `msg`.
+void UvServer::publish(uint8_t *msg, const size_t length) {
+    PublishableMessage m = {
+        .msg = msg,
+        .length = length
+    };
+
+    // Per http://docs.libuv.org/en/v1.x/design.html , it's not thread-safe to touch a libuv loop
+    // outside of the thread running it, so instead we use http://docs.libuv.org/en/v1.x/async.html
+    // in the form of uvw's AsyncHandle wrapper to signal to the event loop that there are messages
+    // which need to be delivered.
     lock.lock();
-    for (auto const &client : clients) {
-        //FIXME: it's supposedly not safe to call anything in libuv from outside
-        // the thread running the event loop - so probably we should do something like
-        // auto handle = loop->resource<uvw::AsyncHandle>()
-        // and then use that to signal that there's a buffer of data to be drained
-        // somewhere?
-        client->publish(msg, length);
+    publish_queue.push_back(m);
+    lock.unlock();
+    check_publish_queue_handle->send();
+}
+
+void UvServer::drain_publish_queue() {
+    lock.lock();
+    size_t message_count = publish_queue.size();
+    for (PublishableMessage m : publish_queue) {
+        for (auto const &client : clients) {
+            client->publish(m.msg, m.length);
+        }
+        free(m.msg);
     }
+    publish_queue.clear();
     if (NETWORK_DEBUG) {
         if (clients.size() == 0) {
-            printf("[+] Draconity transport: no clients connected so publish message was dropped\n");
+            printf("[+] Draconity transport: no clients connected so %zu "
+                   "publish messages were dropped\n", message_count);
         } else {
-            printf("[+] Draconity transport: published message to %zu clients\n", clients.size());
+            printf("[+] Draconity transport: published %zu messages to %zu clients\n",
+                   message_count, clients.size());
         }
     }
     lock.unlock();
@@ -365,5 +407,4 @@ void draconity_transport_publish(const char *topic, uint8_t *data, uint32_t size
         started_server->publish(data, size);
     }
     started_server_lock.unlock();
-    free(data);
 }
