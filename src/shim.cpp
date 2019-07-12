@@ -170,7 +170,7 @@ static void engine_acquire(drg_engine *engine, bool early) {
         _engine = engine;
         engine_setup(engine);
     }
-    if (!early && !state.ready) {
+    if (!early && !draconity->ready) {
         if (_DSXEngine_GetCurrentSpeaker(_engine)) {
             draconity_ready();
         }
@@ -237,49 +237,48 @@ static int DSXFileSystem_PreferenceSetValue(drg_filesystem *fs, char *a, char *b
 
 // track which dragon grammars are active, so "dragon" pseudogrammar can activate them
 int DSXGrammar_Activate(drg_grammar *grammar, uint64_t unk1, bool unk2, const char *main_rule) {
-    pthread_mutex_lock(&state.dragon_lock);
+    pthread_mutex_lock(draconity->dragon_lock);
     foreign_grammar *fg = malloc(sizeof(foreign_grammar));
     fg->grammar = grammar;
     fg->unk1 = unk1;
     fg->unk2 = unk2;
     if (main_rule) fg->main_rule = strdup(main_rule);
     else           fg->main_rule = NULL;
-    tack_push(&state.dragon_grammars, fg);
+    draconity->dragon_grammars.push_back(fg);
     int ret = 0;
-    if (state.dragon_enabled) {
+    if (draconity->dragon_enabled) {
         ret = _DSXGrammar_Activate(grammar, unk1, unk2, main_rule);
     }
-    pthread_mutex_unlock(&state.dragon_lock);
+    pthread_mutex_unlock(draconity->dragon_lock);
     return ret;
 }
 
 int DSXGrammar_Deactivate(drg_grammar *grammar, uint64_t unk1, const char *main_rule) {
-    pthread_mutex_lock(&state.dragon_lock);
-    foreign_grammar *fg;
-    tack_foreach(&state.dragon_grammars, fg) {
+    pthread_mutex_lock(draconity->dragon_lock);
+    for (foreign_grammar *fg : draconity->dragon_grammars) {
         if (fg->grammar == grammar && ((fg->main_rule == NULL && main_rule == NULL)
                     || (fg->main_rule && main_rule && strcmp(fg->main_rule, main_rule) == 0))) {
-            tack_remove(&state.dragon_grammars, fg);
+            tack_remove(draconity->dragon_grammars, fg);
             free((void *)fg->main_rule);
             free(fg);
             break;
         }
     }
     int ret = 0;
-    if (state.dragon_enabled) {
+    if (draconity->dragon_enabled) {
         ret = _DSXGrammar_Deactivate(grammar, unk1, main_rule);
     }
-    pthread_mutex_unlock(&state.dragon_lock);
+    pthread_mutex_unlock(draconity->dragon_lock);
     return ret;
 }
 
 int DSXGrammar_SetList(drg_grammar *grammar, const char *name, dsx_dataptr *data) {
-    pthread_mutex_lock(&state.dragon_lock);
+    pthread_mutex_lock(draconity->dragon_lock);
     int ret = 0;
-    if (state.dragon_enabled) {
+    if (draconity->dragon_enabled) {
         ret = _DSXGrammar_SetList(grammar, name, data);
     }
-    pthread_mutex_unlock(&state.dragon_lock);
+    pthread_mutex_unlock(draconity->dragon_lock);
     return ret;
 }
 #endif //RUN_IN_DRAGON
