@@ -17,6 +17,12 @@
 // (Makes draconity not so useful but it's helpful for testing other parts of the codebase.)
 #define RUN_IN_DRAGON false
 
+typedef struct {
+  uint64_t key;
+  uint64_t ts;
+  uint64_t serial;
+} reusekey;
+
 class Grammar {
     public:
         Grammar(const char *name, const char *main_rule);
@@ -64,7 +70,7 @@ class Draconity {
         std::mutex keylock;
         std::map<std::string, Grammar *> grammars;
         std::map<uintptr_t, std::string> gkeys;
-        std::list<uintptr_t> gkfree;
+        std::list<reusekey *> gkfree;
 
         const char *micstate;
         bool ready;

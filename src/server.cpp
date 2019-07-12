@@ -24,12 +24,6 @@
 #define MS  (1000 * US)
 #define SEC (1000 * MS)
 
-typedef struct {
-    uint64_t key;
-    uint64_t ts;
-    uint64_t serial;
-} reusekey;
-
 void draconity_publish(const char *topic, bson_t *obj) {
     BSON_APPEND_INT64(obj, "ts", bson_get_monotonic_time());
     uint32_t length = 0;
@@ -54,7 +48,6 @@ static bson_t *success_msg() {
     return BCON_NEW("success", BCON_BOOL(true));
 }
 
-#if CPP_PORT_IS_DONE
 static int grammar_disable(Grammar *grammar, char **errmsg) {
     int rc = 0;
     if ((rc =_DSXGrammar_Deactivate(grammar->handle, 0, grammar->main_rule))) {
@@ -98,22 +91,21 @@ static int grammar_unload(Grammar *g) {
     rc = _DSXGrammar_Destroy(g->handle);
 
     draconity->keylock.lock();
-    tack_hdel(&state.grammars, g->name);
-    tack_remove(&state.grammars, g);
-    // see comment in g.load for more info on keys
-    tack_set(&state.gkeys, g->key, NULL);
+    draconity->grammars.erase(g->name);
+    // Don't erase the key outright - just map it to an empty string for now to
+    // avoid race conditions. See comment in `g.load` for full explanation.
+    draconity->gkeys[g->key] = "";
 
-    reusekey *reuse = malloc(sizeof(reusekey));
+    reusekey *reuse = new reusekey;
     reuse->key = g->key;
     reuse->ts = bson_get_monotonic_time();
-    reuse->serial = state.serial;
-    tack_push(&state.gkfree, reuse);
+    reuse->serial = draconity->serial;
+    draconity->gkfree.push_back(reuse);
 
     grammar_free(g);
     draconity->keylock.unlock();
     return rc;
 }
-#endif //CPP_PORT_IS_DONE
 
 static bson_t *handle_message(const uint8_t *msg, uint32_t msglen) {
     std::ostringstream errstream;
@@ -444,7 +436,6 @@ static bson_t *handle_message(const uint8_t *msg, uint32_t msglen) {
             grammar = new Grammar(name, main_rule);
             // FIXME: this still needs to be cleaned up as part of porting to C++
             draconity->grammar_load(grammar);
-#if CPP_PORT_IS_DONE
             dsx_dataptr dp = {.data = (void *)data_buf, .size = data_len};
 
             int ret = _DSXEngine_LoadGrammar(_engine, 1 /*cfg*/, &dp, &grammar->handle);
@@ -454,32 +445,29 @@ static bson_t *handle_message(const uint8_t *msg, uint32_t msglen) {
                 delete grammar;
                 goto end;
             }
-            tack_push(&state.grammars, grammar);
-            tack_hset(&state.grammars, grammar->name, grammar);
+            draconity->grammars[grammar->name] = grammar;
             // keys are used to associate grammar objects with callbacks
             // in a way that allows us to free the grammar objects without crashing if a callback was in flight
             // once freed, keys can be reused after 30 seconds, or if the global serial has increased by at least 3
             // (to prevent both callback confusion and key explosion)
             bool reused = false;
-            reusekey *reuse;
             int64_t now = bson_get_monotonic_time();
-            pthread_mutex_lock(&state.keylock);
-            tack_foreach(&state.gkfree, reuse) {
-                if (now - reuse->ts > 30 * SEC || reuse->serial + 3 <= state.serial) {
+            pthread_mutex_lock(draconity->keylock);
+            for (reusekey * reuse : draconity->gkfree) {
+                if (now - reuse->ts > 30 * SEC || reuse->serial + 3 <= draconity->serial) {
                     reused = true;
                     grammar->key = reuse->key;
                     free(reuse);
-                    tack_del(&state.gkfree, i);
-                    tack_set(&state.gkeys, grammar->key, grammar);
+                    draconity->gkfree.erase(i);
+                    draconity->gkeys[grammar->key] = grammar;
                     break;
                 }
             }
             if (!reused) {
-                grammar->key = tack_len(&state.gkeys);
-                tack_push(&state.gkeys, grammar);
+                grammar->key = draconity->gkeys.size();
+                draconity->gkeys.push_back(grammar);
             }
-            pthread_mutex_unlock(&state.keylock);
-#endif //CPP_PORT_IS_DONE
+            pthread_mutex_unlock(draconity->keylock);
             // printf("%d\n", _DSXGrammar_SetApplicationName(grammar->handle, grammar->name));
             resp = success_msg();
         } else {
@@ -496,8 +484,7 @@ static bson_t *handle_message(const uint8_t *msg, uint32_t msglen) {
             "runtime", BCON_INT64(bson_get_monotonic_time() - draconity->start_ts));
 
         BSON_APPEND_ARRAY_BEGIN(doc, "grammars", &grammars);
-#if CPP_PORT_IS_DONE
-        tack_foreach(&state.grammars, grammar) {
+        for (Grammar * grammar : draconity->grammars) {
             bson_uint32_to_string(i, &key, keystr, sizeof(keystr));
             BSON_APPEND_DOCUMENT_BEGIN(&grammars, key, &child);
             BSON_APPEND_UTF8(&child, "name", grammar->name);
@@ -507,16 +494,15 @@ static bson_t *handle_message(const uint8_t *msg, uint32_t msglen) {
             bson_append_document_end(&grammars, &child);
         }
         // dragon psuedo-grammar
-        bson_uint32_to_string(tack_len(&state.grammars), &key, keystr, sizeof(keystr));
+        bson_uint32_to_string(draconity->grammars.size(), &key, keystr, sizeof(keystr));
         BSON_APPEND_DOCUMENT_BEGIN(&grammars, key, &child);
         BSON_APPEND_UTF8(&child, "name", "dragon");
-        BSON_APPEND_BOOL(&child, "enabled", state.dragon_enabled);
+        BSON_APPEND_BOOL(&child, "enabled", draconity->dragon_enabled);
         BSON_APPEND_INT32(&child, "priority", 0);
         BSON_APPEND_BOOL(&child, "exclusive", false);
         bson_append_document_end(&grammars, &child);
 
         bson_append_array_end(doc, &grammars);
-#endif //CPP_PORT_IS_DONE
 
         resp = doc;
     } else if (streq(cmd, "mimic")) {
