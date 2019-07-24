@@ -11,7 +11,7 @@
 
 // Define to false to deactivate use of tack and other bits that still need porting to C++
 // (Breaks draconity but is helpful for testing the rest compiles.)
-#define CPP_PORT_IS_DONE false
+#define CPP_PORT_IS_DONE true
 
 // Define to false to disable code that relies on dragon functions existing
 // (Makes draconity not so useful but it's helpful for testing other parts of the codebase.)
