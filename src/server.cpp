@@ -92,9 +92,9 @@ static int grammar_unload(Grammar *g) {
 
     draconity->keylock.lock();
     draconity->grammars.erase(g->name);
-    // Don't erase the key outright - just map it to an empty string for now to
-    // avoid race conditions. See comment in `g.load` for full explanation.
-    draconity->gkeys[g->key] = "";
+    // Don't erase the key outright yet - we make it null for now to avoid race
+    // conditions. See comment in `g.load` for full explanation.
+    draconity->gkeys[g->key] = NULL;
 
     reusekey *reuse = new reusekey;
     reuse->key = g->key;

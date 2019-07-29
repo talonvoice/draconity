@@ -69,7 +69,7 @@ class Draconity {
 
         std::mutex keylock;
         std::map<std::string, Grammar *> grammars;
-        std::map<uintptr_t, std::string> gkeys;
+        std::map<uintptr_t, Grammar *> gkeys;
         std::list<reusekey *> gkfree;
 
         const char *micstate;
