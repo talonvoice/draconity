@@ -80,7 +80,7 @@ class Draconity {
         bool ready;
         uint64_t start_ts, serial;
 
-        std::map<uintptr_t, ForeignGrammar *> dragon_grammars;
+        std::list<ForeignGrammar *> dragon_grammars;
         std::mutex dragon_lock;
         bool dragon_enabled;
 
