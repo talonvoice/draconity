@@ -37,6 +37,18 @@ int draconity_set_param(const char *key, const char *value) {
     return ret;
 }
 
+#if defined(_WIN32) || defined(__MINGW32__) || defined(__MINGW64__)
+static char *homedir() {
+    // This should return "<userdir>/AppData/Roaming" on Windows 7+.
+    // E.g: "C:/Users/Michael/AppData/Roaming"
+    char *home = getenv("APPDATA");
+    if (home) {
+        return home;
+    } else {
+        return NULL;
+    }
+}
+#elif defined(__APPLE__)
 static char *homedir() {
     char *home = getenv("HOME");
     if (home) {
@@ -50,6 +62,7 @@ static char *homedir() {
         return NULL;
     }
 }
+#endif // defined(_WIN32) || defined(__MINGW32__) || defined(__MINGW64__)
 
 typedef struct {
     char *timeout;
