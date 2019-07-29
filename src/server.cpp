@@ -54,28 +54,6 @@ static bson_t *success_msg() {
     return BCON_NEW("success", BCON_BOOL(true));
 }
 
-static int grammar_disable(Grammar *grammar, char **errmsg) {
-    int rc = 0;
-    if ((rc =_DSXGrammar_Deactivate(grammar->handle, 0, grammar->main_rule))) {
-        asprintf(errmsg, "error deactivating grammar: %d", rc);
-        return rc;
-    }
-    grammar->enabled = false;
-    if ((rc =_DSXGrammar_Unregister(grammar->handle, grammar->endkey))) {
-        asprintf(errmsg, "error removing end cb: %d", rc);
-        return rc;
-    }
-    if ((rc = _DSXGrammar_Unregister(grammar->handle, grammar->hypokey))) {
-        asprintf(errmsg, "error removing hypothesis cb: %d", rc);
-        return rc;
-    }
-    if ((rc = _DSXGrammar_Unregister(grammar->handle, grammar->beginkey))) {
-        asprintf(errmsg, "error removing begin cb: %d", rc);
-        return rc;
-    }
-    return 0;
-}
-
 static void grammar_free(Grammar *g) {
     free((void *)g->main_rule);
     free((void *)g->name);
@@ -85,12 +63,11 @@ static void grammar_free(Grammar *g) {
 }
 
 static int grammar_unload(Grammar *g) {
-    char *disablemsg = NULL;
+    std::string errmsg;
     int rc = 0;
     if (g->enabled) {
-        if ((rc = grammar_disable(g, &disablemsg))) {
-            draconity_logf("during unload: %s", disablemsg);
-            free(disablemsg);
+        if ((rc = g->disable(&errmsg))) {
+            draconity_logf("during unload: %s", errmsg.c_str());
             return rc;
         }
     }
@@ -334,7 +311,7 @@ static bson_t *handle_message(const uint8_t *msg, uint32_t msglen) {
                         goto end;
                     }
                 } else {
-                    errmsg = draconity->grammar_disable(grammar);
+                    grammar->disable(&errmsg);
                     if (errmsg.size() > 0) {
                         goto end;
                     }

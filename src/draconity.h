@@ -31,6 +31,8 @@ class Grammar {
             this->main_rule = main_rule;
         };
 
+        int disable(std::string *errmsg);
+
         uintptr_t key;
         const char *name, *main_rule;
         drg_grammar *handle;
@@ -81,7 +83,6 @@ class Draconity {
         Grammar *grammar_get(const char *name);
         void grammar_set(Grammar *grammar);
         int grammar_enable(Grammar *g);
-        int grammar_disable(Grammar *g);
         int grammar_load(Grammar *g);
         int grammar_unload(Grammar *g);
 

@@ -20,6 +20,33 @@ void Draconity::grammar_set(Grammar *grammar) {
     this->grammars[grammar->name] = grammar;
 }
 
+int Grammar::disable(std::string *errmsg) {
+    int rc = 0;
+    std::stringstream errstream;
+    if ((rc =_DSXGrammar_Deactivate(this->handle, 0, this->main_rule))) {
+        errstream << "error deactivating grammar: " << rc;
+        *errmsg = errstream.str();
+        return rc;
+    }
+    this->enabled = false;
+    if ((rc =_DSXGrammar_Unregister(this->handle, this->endkey))) {
+        errstream << "error removing end cb: " << rc;
+        *errmsg = errstream.str();
+        return rc;
+    }
+    if ((rc = _DSXGrammar_Unregister(this->handle, this->hypokey))) {
+        errstream << "error removing hypothesis cb: " << rc;
+        *errmsg = errstream.str();
+        return rc;
+    }
+    if ((rc = _DSXGrammar_Unregister(this->handle, this->beginkey))) {
+        errstream << "error removing begin cb: %d" << rc;
+        *errmsg = errstream.str();
+        return rc;
+    }
+    return 0;
+}
+
 bool ForeignGrammar::matches(drg_grammar *other_grammar, const char *other_main_rule) {
     /* Does this grammar match another?
 
