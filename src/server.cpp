@@ -13,6 +13,13 @@
 #include "server.h"
 #include "draconity.h"
 
+#if defined(__MINGW32__) || defined(__MINGW64__)
+// On MSYS2 mingw, we have to include libiberty explicitly for vasprintf.
+#ifndef vasprintf
+#include "libiberty/libiberty.h"
+#endif // def vasprintf
+#endif // defined(__MINGW32__) || defined(__MINGW64__)
+
 #define align4(len) ((len + 4) & ~3)
 
 #ifndef streq
