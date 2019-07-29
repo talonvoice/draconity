@@ -1,7 +1,6 @@
 #include <sstream>
 
 #include <bson.h>
-#include <pwd.h>
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stdio.h>
