@@ -95,13 +95,6 @@ void draconity_set_default_params() {
 }
 
 static void engine_setup(drg_engine *engine) {
-    // _SDApi_SetShowCalls(true);
-    // _SDApi_SetShowCallsWithFileSpecArgs(true);
-    // _SDApi_SetShowCallPointerArguments(true);
-    // _SDApi_SetShowCallMemDeltas(true);
-    // _SDApi_SetShowAllocation(true);
-    // _SDApi_SetShowAllocationHistogram(true);
-
     static unsigned int cb_key = 0;
     int ret = _DSXEngine_RegisterAttribChangedCallback(engine, draconity_attrib_changed, NULL, &cb_key);
     if (ret) draconity_logf("error adding attribute callback: %d", ret);
@@ -294,18 +287,6 @@ static symload server_syms[] = {
     s(DSXResult_BestPathWord),
     s(DSXResult_GetWordNode),
     s(DSXResult_Destroy),
-    {0},
-};
-
-static symload mrec_syms[] = {
-    s(SDApi_SetShowCalls),
-    s(SDApi_SetShowCallsWithFileSpecArgs),
-    s(SDApi_SetShowCallPointerArguments),
-    s(SDApi_SetShowCallMemDeltas),
-    s(SDApi_SetShowAllocation),
-    s(SDApi_SetShowAllocationHistogram),
-    s(SDRule_New),
-    s(SDRule_Delete),
     {0},
 };
 #undef s
