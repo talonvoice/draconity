@@ -483,7 +483,10 @@ static bson_t *handle_message(const uint8_t *msg, uint32_t msglen) {
             "runtime", BCON_INT64(bson_get_monotonic_time() - draconity->start_ts));
 
         BSON_APPEND_ARRAY_BEGIN(doc, "grammars", &grammars);
-        for (Grammar * grammar : draconity->grammars) {
+        // Iterate over an index and the current grammar
+        int i = 0;
+        for (const auto& pair : draconity->grammars) {
+            Grammar *grammar = pair.second;
             bson_uint32_to_string(i, &key, keystr, sizeof(keystr));
             BSON_APPEND_DOCUMENT_BEGIN(&grammars, key, &child);
             BSON_APPEND_UTF8(&child, "name", grammar->name);
@@ -491,6 +494,7 @@ static bson_t *handle_message(const uint8_t *msg, uint32_t msglen) {
             BSON_APPEND_INT32(&child, "priority", grammar->priority);
             BSON_APPEND_BOOL(&child, "exclusive", grammar->exclusive);
             bson_append_document_end(&grammars, &child);
+            i++;
         }
         // dragon psuedo-grammar
         bson_uint32_to_string(draconity->grammars.size(), &key, keystr, sizeof(keystr));
