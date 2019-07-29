@@ -25,7 +25,11 @@ typedef struct {
 
 class Grammar {
     public:
-        Grammar(const char *name, const char *main_rule);
+        Grammar(const char *name, const char *main_rule) {
+            this->name = name;
+            this->main_rule = main_rule;
+        };
+
         uintptr_t key;
         const char *name, *main_rule;
         drg_grammar *handle;
