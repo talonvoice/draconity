@@ -15,7 +15,7 @@
 
 // Define to false to disable code that relies on dragon functions existing
 // (Makes draconity not so useful but it's helpful for testing other parts of the codebase.)
-#define RUN_IN_DRAGON false
+#define RUN_IN_DRAGON true
 
 typedef struct {
   uint64_t key;
