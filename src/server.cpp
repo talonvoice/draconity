@@ -458,7 +458,7 @@ static bson_t *handle_message(const uint8_t *msg, uint32_t msglen) {
             // (to prevent both callback confusion and key explosion)
             bool reused = false;
             int64_t now = bson_get_monotonic_time();
-            pthread_mutex_lock(draconity->keylock);
+            draconity->keylock.lock();
             for (reusekey * reuse : draconity->gkfree) {
                 if (now - reuse->ts > 30 * SEC || reuse->serial + 3 <= draconity->serial) {
                     reused = true;
@@ -473,7 +473,7 @@ static bson_t *handle_message(const uint8_t *msg, uint32_t msglen) {
                 grammar->key = draconity->gkeys.size();
                 draconity->gkeys.push_back(grammar);
             }
-            pthread_mutex_unlock(draconity->keylock);
+            draconity->keylock.unlock();
             // printf("%d\n", _DSXGrammar_SetApplicationName(grammar->handle, grammar->name));
             resp = success_msg();
         } else {
