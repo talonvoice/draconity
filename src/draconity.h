@@ -6,6 +6,7 @@
 #include <map>
 #include <mutex>
 #include <unordered_set>
+#include <cstring>
 
 #include "types.h"
 
@@ -43,8 +44,23 @@ class Grammar {
 
 class ForeignGrammar {
     public:
-        ForeignGrammar();
+        ForeignGrammar(drg_grammar *grammar, uint64_t unk1, bool unk2, const char *main_rule) {
+            this->grammar = grammar;
+            this->unk1 = unk1;
+            this->unk2 = unk2;
+            if (main_rule) {
+                this->main_rule = strdup(main_rule);
+            } else {
+                this->main_rule = NULL;
+            }
+        };
+
+        bool matches(drg_grammar *other_grammar, const char *other_main_rule);
+        int activate();
+        int deactivate();
+
     private:
+        bool main_rule_matches(const char* other_main_rule);
         drg_grammar *grammar;
         uint64_t unk1;
         bool unk2;

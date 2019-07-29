@@ -159,13 +159,8 @@ static int DSXFileSystem_PreferenceSetValue(drg_filesystem *fs, char *a, char *b
 // track which dragon grammars are active, so "dragon" pseudogrammar can activate them
 int DSXGrammar_Activate(drg_grammar *grammar, uint64_t unk1, bool unk2, const char *main_rule) {
     draconity->dragon_lock.lock();
-    foreign_grammar *fg = malloc(sizeof(foreign_grammar));
-    fg->grammar = grammar;
-    fg->unk1 = unk1;
-    fg->unk2 = unk2;
-    if (main_rule) fg->main_rule = strdup(main_rule);
-    else           fg->main_rule = NULL;
-    draconity->dragon_grammars.push_back(fg);
+    ForeignGrammar *foreign_grammar = new ForeignGrammar(grammar, unk1, unk2, main_rule);
+    draconity->dragon_grammars.push_back(foreign_grammar);
     int ret = 0;
     if (draconity->dragon_enabled) {
         ret = _DSXGrammar_Activate(grammar, unk1, unk2, main_rule);
@@ -176,15 +171,23 @@ int DSXGrammar_Activate(drg_grammar *grammar, uint64_t unk1, bool unk2, const ch
 
 int DSXGrammar_Deactivate(drg_grammar *grammar, uint64_t unk1, const char *main_rule) {
     draconity->dragon_lock.lock();
-    for (foreign_grammar *fg : draconity->dragon_grammars) {
-        if (fg->grammar == grammar && ((fg->main_rule == NULL && main_rule == NULL)
-                    || (fg->main_rule && main_rule && strcmp(fg->main_rule, main_rule) == 0))) {
-            tack_remove(draconity->dragon_grammars, fg);
-            free((void *)fg->main_rule);
-            free(fg);
+    // Remove the grammar from the draconity's internal map (if it exists).
+    ForeignGrammar *grammar_to_remove = NULL;
+    for (ForeignGrammar *foreign_grammar : draconity->dragon_grammars) {
+        if (foreign_grammar->matches(grammar, main_rule)) {
+            // Can't remove within the for loop - store the grammar, then break
+            // and remove it.
+            grammar_to_remove = foreign_grammar;
             break;
         }
     }
+    if (grammar_to_remove) {
+        draconity->dragon_grammars.remove(grammar_to_remove);
+        delete grammar_to_remove;
+    }
+
+    // Now Draconity's record of the grammar has been removed, it can be
+    // disabled.
     int ret = 0;
     if (draconity->dragon_enabled) {
         ret = _DSXGrammar_Deactivate(grammar, unk1, main_rule);
