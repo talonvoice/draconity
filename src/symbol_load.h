@@ -17,20 +17,19 @@ private:
 template <typename F>
 class TypedSymbolLoad : public SymbolLoad {
 public:
-    SymbolLoad(std::string name, F *ptr) : SymbolLoad(name) {
+    TypedSymbolLoad(std::string name, F *ptr) : SymbolLoad(name) {
         this->ptr = ptr;
     }
 
     void setAddr(uintptr_t addr) override {
         *this->ptr = reinterpret_cast<F>(addr);
         this->loaded = true;
-        return 0;
     };
 private:
     F *ptr;
 };
 
 template <typename F>
-SymbolLoad<F> makeSymbolLoad(std::string name, F *ptr) {
-    return SymbolLoad<F>(name, ptr);
+SymbolLoad makeSymbolLoad(std::string name, F *ptr) {
+    return TypedSymbolLoad<F>(name, ptr);
 }

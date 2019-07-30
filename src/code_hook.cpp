@@ -1,11 +1,8 @@
-#pragma once
-
-#include <string>
-#include <windows.h>
-#include <stdint.h>
-
 #include <Zydis/Zydis.h>
+#include <string>
 
+#include "platform.h"
+#include "code_hook.h"
 
 static size_t dis_code_size(uint8_t *addr, size_t size) {
     ZydisDecoder dis;
@@ -32,24 +29,10 @@ static void dis_mem(uint8_t *addr, size_t size) {
     }
 }
 
-/* Base class exposing the minimal interface needed to attach the hook. */
-class CodeHook {
- public:
-    CodeHook(std::string name) {
-        this->name = name;
-        this->active = false;
-    }
-    virtual int setup(uintptr_t addr);
-
-public:
-    std::string name;
-    bool active;
-};
-
 template <typename F>
-class TypedCodeHook : public CodeHookBase {
+class TypedCodeHook : public CodeHook {
 public:
-    TypedCodeHook(std::string name, F target, F *original) : CodeHookBase(name) {
+    TypedCodeHook(std::string name, F target, F *original) : CodeHook(name) {
         this->target = target;
         this->origData = (uint8_t *)calloc(1, jmpSize());
         this->patchData = (uint8_t *)calloc(1, jmpSize());
@@ -61,18 +44,15 @@ public:
         printf("[+] hooking %s (%p)\n", this->name, addr);
         this->addr = addr;
 
-        SYSTEM_INFO system_info;
-        GetSystemInfo(&system_info);
-        size_t page_mask = system_info.dwPageSize - 1;
+        size_t page_mask = Platform::pageSize() - 1;
 
         int paddedSize = dis_code_size((uint8_t*)addr, jmpSize());
         size_t trampolineSize = (paddedSize + jmpSize() + page_mask) & ~page_mask;
-        uint8_t *trampoline = (uint8_t*)VirtualAlloc(NULL, trampolineSize, MEM_COMMIT, PAGE_READWRITE);
+        uint8_t *trampoline = (uint8_t *)Platform::mmap(trampolineSize);
 
-        memcpy(trampoline, addr, paddedSize);
+        memcpy(reinterpret_cast<void *>(trampoline), reinterpret_cast<void *>(addr), paddedSize);
         jmpPatch(trampoline + paddedSize, (uint8_t*)addr + paddedSize);
-        DWORD oldProtect;
-        VirtualProtect(trampoline, trampolineSize, PAGE_EXECUTE_READ, &oldProtect);
+        Platform::protectRX(trampoline, trampolineSize);
 
         jmpPatch(patchData, reinterpret_cast<uint8_t*>(target));
         memcpy(origData, addr, jmpSize());
@@ -92,10 +72,9 @@ private:
         return this->write(this->addr, this->origData, this->jmpSize());
     }
     bool write(void *addr, void *data, int size) {
-        DWORD old_protect;
-        VirtualProtect(addr, size, PAGE_READWRITE, &old_protect);
+        Platform::protectRW(addr, size);
         memcpy(addr, data, size);
-        VirtualProtect(addr, size, old_protect, &old_protect);
+        Platform::protectRX(addr, size);
         return true;
     }
 public:
@@ -135,10 +114,10 @@ private:
 };
 
 template <typename F>
-CodeHook<F> makeCodeHook(std::string name, F target, F *original) {
+CodeHook makeCodeHook(std::string name, F target, F *original) {
 #ifdef B64
-    return new CodeHook_x86_64<F>(name, target, original);
+    return CodeHook_x86_64<F>(name, target, original);
 #else
-    return new CodeHook_x86<F>(name, target, original);
+    return CodeHook_x86<F>(name, target, original);
 #endif
 }

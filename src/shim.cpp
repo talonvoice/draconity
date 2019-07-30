@@ -1,8 +1,3 @@
-// TODO needs to be replaced with cross platform shimming approach
-
-#include <Zydis/Zydis.h>
-#include <bson.h>
-#include <dlfcn.h>
 #include <fcntl.h>
 #include <libgen.h>
 #include <pthread.h>
@@ -13,10 +8,7 @@
 
 #include "server.h"
 #include "draconity.h"
-
-#include "codehook.h"
-#include "symbolicator.h"
-
+#include "platform.h"
 
 #ifndef streq
 #define streq(a, b) !strcmp(a, b)
@@ -24,9 +16,7 @@
 
 // #define DEBUG
 
-
-#include "api.h" // this defines the function pointers
-
+#include "api.h"
 
 int draconity_set_param(const char *key, const char *value) {
     if (!_engine) return -1;
@@ -48,6 +38,9 @@ static char *homedir() {
     }
 }
 #elif defined(__APPLE__)
+#include <sys/types.h>
+#include <pwd.h>
+
 static char *homedir() {
     char *home = getenv("HOME");
     if (home) {
@@ -105,7 +98,6 @@ void draconity_set_default_params() {
     draconity_set_param("MaxCFGWords", "20000");
     draconity_set_param("MaxPronGuessedWords", "20000");
     draconity_set_param("PhraseHypothesisCallbackThread", "1");
-    // CrashOnSDAPIError
 }
 
 static void engine_setup(drg_engine *engine) {
@@ -263,8 +255,8 @@ static int DSXEngine_LoadGrammar(drg_engine *engine,
     return orig_DSXEngine_LoadGrammar(engine, format, data, grammar);
 }
 
-#define h makeCodeHook(#name, &_##name)
-static std::list<CodeHookBase> dragon_hooks = {
+#define h(name) makeCodeHook(#name, name, &orig_##name)
+static std::list<CodeHook> dragon_hooks = {
     h(DSXEngine_New),
     h(DSXEngine_Create),
     h(DSXEngine_GetMicState),
@@ -272,8 +264,8 @@ static std::list<CodeHookBase> dragon_hooks = {
 };
 #undef h
 
-#define s makeSymbolLoad(#name, &_##name)
-static std::list<SymbolLoadBase> server_syms {
+#define s(name) makeSymbolLoad(#name, &_##name)
+static std::list<SymbolLoad> server_syms {
     s(DSXEngine_Create),
     s(DSXEngine_New),
 
@@ -331,15 +323,21 @@ static std::list<SymbolLoadBase> server_syms {
 };
 #undef s
 
-static void *draconity_install(void *_) {
+static void draconity_install() {
     printf("[+] draconity starting\n");
-    int hooked = draconity_hook_symbols(dragon_hooks, server_syms);
+    int hooked = 0;
+#ifdef APPLE
+    hooked |= Platform::loadSymbols("server.so", server_syms);
+    hooked |= Platform::applyHooks("Dragon", dragon_hooks);
+#else
+    hooked |= Platform::loadSymbols("server.dll", server_syms);
+    hooked |= Platform::applyHooks("server.dll", dragon_hooks);
+#endif
     if (hooked != 0) {
         printf("[!] draconity failed to hook!");
-        return NULL;
+        return;
     }
     draconity_init();
-    return NULL;
 }
 
 __attribute__((constructor))
@@ -349,5 +347,5 @@ void cons() {
     dup2(log, 1);
     dup2(log, 2);
 #endif
-    draconity_install(NULL);
+    draconity_install();
 }
