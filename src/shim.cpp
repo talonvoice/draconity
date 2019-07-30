@@ -228,8 +228,8 @@ int DSXGrammar_RegisterPhraseHypothesisCallback(drg_grammar *grammar, void *cb, 
 */
 
 
-drg_engine* (*orig_DSXEngine_New)();
-static drg_engine* DSXEngine_New() {
+drg_engine *(*orig_DSXEngine_New)();
+static drg_engine *DSXEngine_New() {
     drg_engine *engine = orig_DSXEngine_New();
     draconity_logf("DSXEngine_New() = %p", engine);
     engine_acquire(engine, true);
@@ -251,7 +251,7 @@ static int DSXEngine_GetMicState(drg_engine *engine, int64_t *state) {
 }
 
 // TODO: I've manually specified various types here. Revert them to void?
-int (*orig_DSXEngine_LoadGrammar)(drg_engine* engine,
+int (*orig_DSXEngine_LoadGrammar)(drg_engine *engine,
                                   int format,
                                   void *data,
                                   void **grammar);
@@ -273,16 +273,19 @@ static int DSXEngine_LoadGrammar(drg_engine *engine,
    Please note, since this creates a new CodeHook, it will need to be manually
    deleted when it is no longer needed.
 */
-template <typename F> CodeHook<F> *makeCodeHook(std::string name, F target, F *original) {
+template <typename F>
+CodeHook<F> *makeCodeHook(std::string name, F target, F *original) {
 	return new CodeHook<F>(name, target, original);
 }
 
+#define h makeCodeHook(#name, &_##name)
 static std::list<CodeHookBase*> dragon_hooks = {
-    makeCodeHook("DSXEngine_New", DSXEngine_New, &orig_DSXEngine_New),
-    makeCodeHook("DSXEngine_Create", DSXEngine_Create, &orig_DSXEngine_Create),
-    makeCodeHook("DSXEngine_GetMicState", DSXEngine_GetMicState, &orig_DSXEngine_GetMicState),
-    makeCodeHook("DSXEngine_LoadGrammar", DSXEngine_LoadGrammar, &orig_DSXEngine_LoadGrammar),
+    h(DSXEngine_New),
+    h(DSXEngine_Create),
+    h(DSXEngine_GetMicState),
+    h(DSXEngine_LoadGrammar),
 };
+#undef h
 
 /* Helper function to create a typed SymbolLoad and automatically infer F
 
@@ -291,66 +294,69 @@ static std::list<CodeHookBase*> dragon_hooks = {
    Please note, since this creates a new SymbolLoad, it will need to be manually
    deleted when no longer needed.
 */
-template <typename F> SymbolLoad<F> *makeSymbolLoad(std::string name, F* ptr) {
+template <typename F>
+SymbolLoad<F> *makeSymbolLoad(std::string name, F *ptr) {
     return new SymbolLoad<F>(name, ptr);
 }
 
+#define s makeSymbolLoad(#name, &_##name)
 static std::list<SymbolLoadBase*> server_syms {
-    makeSymbolLoad("DSXEngine_Create",                            &_DSXEngine_Create),
-    makeSymbolLoad("DSXEngine_New",                               &_DSXEngine_New),
+    s(DSXEngine_Create),
+    s(DSXEngine_New),
 
-    makeSymbolLoad("DSXEngine_AddWord",                           &_DSXEngine_AddWord),
-    makeSymbolLoad("DSXEngine_AddTemporaryWord",                  &_DSXEngine_AddTemporaryWord),
-    makeSymbolLoad("DSXEngine_DeleteWord",                        &_DSXEngine_DeleteWord),
-    makeSymbolLoad("DSXEngine_ValidateWord",                      &_DSXEngine_ValidateWord),
-    makeSymbolLoad("DSXEngine_EnumWords",                         &_DSXEngine_EnumWords),
+    s(DSXEngine_AddWord),
+    s(DSXEngine_AddTemporaryWord),
+    s(DSXEngine_DeleteWord),
+    s(DSXEngine_ValidateWord),
+    s(DSXEngine_EnumWords),
 
-    makeSymbolLoad("DSXWordEnum_GetCount",                        &_DSXWordEnum_GetCount),
-    makeSymbolLoad("DSXWordEnum_Next",                            &_DSXWordEnum_Next),
-    makeSymbolLoad("DSXWordEnum_End",                             &_DSXWordEnum_End),
+    s(DSXWordEnum_GetCount),
+    s(DSXWordEnum_Next),
+    s(DSXWordEnum_End),
 
-    makeSymbolLoad("DSXEngine_GetCurrentSpeaker",                 &_DSXEngine_GetCurrentSpeaker),
-    makeSymbolLoad("DSXEngine_GetMicState",                       &_DSXEngine_GetMicState),
-    makeSymbolLoad("DSXEngine_LoadGrammar",                       &_DSXEngine_LoadGrammar),
-    makeSymbolLoad("DSXEngine_Mimic",                             &_DSXEngine_Mimic),
-    makeSymbolLoad("DSXEngine_Pause",                             &_DSXEngine_Pause),
-    makeSymbolLoad("DSXEngine_RegisterAttribChangedCallback",     &_DSXEngine_RegisterAttribChangedCallback),
-    makeSymbolLoad("DSXEngine_RegisterMimicDoneCallback",         &_DSXEngine_RegisterMimicDoneCallback),
-    makeSymbolLoad("DSXEngine_RegisterPausedCallback",            &_DSXEngine_RegisterPausedCallback),
-    makeSymbolLoad("DSXEngine_Resume",                            &_DSXEngine_Resume),
-    makeSymbolLoad("DSXEngine_ResumeRecognition",                 &_DSXEngine_ResumeRecognition),
-    makeSymbolLoad("DSXEngine_SetBeginPhraseCallback",            &_DSXEngine_SetBeginPhraseCallback),
-    makeSymbolLoad("DSXEngine_SetEndPhraseCallback",              &_DSXEngine_SetEndPhraseCallback),
+    s(DSXEngine_GetCurrentSpeaker),
+    s(DSXEngine_GetMicState),
+    s(DSXEngine_LoadGrammar),
+    s(DSXEngine_Mimic),
+    s(DSXEngine_Pause),
+    s(DSXEngine_RegisterAttribChangedCallback),
+    s(DSXEngine_RegisterMimicDoneCallback),
+    s(DSXEngine_RegisterPausedCallback),
+    s(DSXEngine_Resume),
+    s(DSXEngine_ResumeRecognition),
+    s(DSXEngine_SetBeginPhraseCallback),
+    s(DSXEngine_SetEndPhraseCallback),
 
-    makeSymbolLoad("DSXEngine_SetStringValue",                    &_DSXEngine_SetStringValue),
-    makeSymbolLoad("DSXEngine_GetValue",                          &_DSXEngine_GetValue),
-    makeSymbolLoad("DSXEngine_GetParam",                          &_DSXEngine_GetParam),
-    makeSymbolLoad("DSXEngine_DestroyParam",                      &_DSXEngine_DestroyParam),
+    s(DSXEngine_SetStringValue),
+    s(DSXEngine_GetValue),
+    s(DSXEngine_GetParam),
+    s(DSXEngine_DestroyParam),
 
-    makeSymbolLoad("DSXFileSystem_PreferenceGetValue",            &_DSXFileSystem_PreferenceGetValue),
-    makeSymbolLoad("DSXFileSystem_PreferenceSetValue",            &_DSXFileSystem_PreferenceSetValue),
-    makeSymbolLoad("DSXFileSystem_SetResultsDirectory",           &_DSXFileSystem_SetResultsDirectory),
-    makeSymbolLoad("DSXFileSystem_SetUsersDirectory",             &_DSXFileSystem_SetUsersDirectory),
-    makeSymbolLoad("DSXFileSystem_SetVocabsLocation",             &_DSXFileSystem_SetVocabsLocation),
+    s(DSXFileSystem_PreferenceGetValue),
+    s(DSXFileSystem_PreferenceSetValue),
+    s(DSXFileSystem_SetResultsDirectory),
+    s(DSXFileSystem_SetUsersDirectory),
+    s(DSXFileSystem_SetVocabsLocation),
 
-    makeSymbolLoad("DSXGrammar_Activate",                         &_DSXGrammar_Activate),
-    makeSymbolLoad("DSXGrammar_Deactivate",                       &_DSXGrammar_Deactivate),
-    makeSymbolLoad("DSXGrammar_Destroy",                          &_DSXGrammar_Destroy),
-    makeSymbolLoad("DSXGrammar_GetList",                          &_DSXGrammar_GetList),
-    makeSymbolLoad("DSXGrammar_RegisterBeginPhraseCallback",      &_DSXGrammar_RegisterBeginPhraseCallback),
-    makeSymbolLoad("DSXGrammar_RegisterEndPhraseCallback",        &_DSXGrammar_RegisterEndPhraseCallback),
-    makeSymbolLoad("DSXGrammar_RegisterPhraseHypothesisCallback", &_DSXGrammar_RegisterPhraseHypothesisCallback),
-    makeSymbolLoad("DSXGrammar_SetApplicationName",               &_DSXGrammar_SetApplicationName),
-    makeSymbolLoad("DSXGrammar_SetApplicationName",               &_DSXGrammar_SetApplicationName),
-    makeSymbolLoad("DSXGrammar_SetList",                          &_DSXGrammar_SetList),
-    makeSymbolLoad("DSXGrammar_SetPriority",                      &_DSXGrammar_SetPriority),
-    makeSymbolLoad("DSXGrammar_SetSpecialGrammar",                &_DSXGrammar_SetSpecialGrammar),
-    makeSymbolLoad("DSXGrammar_Unregister",                       &_DSXGrammar_Unregister),
+    s(DSXGrammar_Activate),
+    s(DSXGrammar_Deactivate),
+    s(DSXGrammar_Destroy),
+    s(DSXGrammar_GetList),
+    s(DSXGrammar_RegisterBeginPhraseCallback),
+    s(DSXGrammar_RegisterEndPhraseCallback),
+    s(DSXGrammar_RegisterPhraseHypothesisCallback),
+    s(DSXGrammar_SetApplicationName),
+    s(DSXGrammar_SetApplicationName),
+    s(DSXGrammar_SetList),
+    s(DSXGrammar_SetPriority),
+    s(DSXGrammar_SetSpecialGrammar),
+    s(DSXGrammar_Unregister),
 
-    makeSymbolLoad("DSXResult_BestPathWord",                      &_DSXResult_BestPathWord),
-    makeSymbolLoad("DSXResult_GetWordNode",                       &_DSXResult_GetWordNode),
-    makeSymbolLoad("DSXResult_Destroy",                           &_DSXResult_Destroy),
+    s(DSXResult_BestPathWord),
+    s(DSXResult_GetWordNode),
+    s(DSXResult_Destroy),
 };
+#undef s
 
 static void *draconity_install(void *_) {
     printf("[+] draconity starting\n");
