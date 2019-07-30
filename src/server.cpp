@@ -436,22 +436,26 @@ static bson_t *handle_message(const uint8_t *msg, uint32_t msglen) {
             // in a way that allows us to free the grammar objects without crashing if a callback was in flight
             // once freed, keys can be reused after 30 seconds, or if the global serial has increased by at least 3
             // (to prevent both callback confusion and key explosion)
-            bool reused = false;
             int64_t now = bson_get_monotonic_time();
             draconity->keylock.lock();
-            for (reusekey * reuse : draconity->gkfree) {
-                if (now - reuse->ts > 30 * SEC || reuse->serial + 3 <= draconity->serial) {
-                    reused = true;
-                    grammar->key = reuse->key;
-                    free(reuse);
-                    draconity->gkfree.erase(i);
-                    draconity->gkeys[grammar->key] = grammar;
+            reusekey * key_to_reuse = NULL;
+            // Search all free keys for one that's reusable.
+            for (reusekey * free_key : draconity->gkfree) {
+                if (now - free_key->ts > 30 * SEC || free_key->serial + 3 <= draconity->serial) {
+                    // This key is reusable. Store it and jump to the next step.
+                    key_to_reuse = free_key;
                     break;
                 }
             }
-            if (!reused) {
+            if (key_to_reuse != NULL) {
+                grammar->key = key_to_reuse->key;
+                // This key is no longer free.
+                draconity->gkfree.remove(key_to_reuse);
+                draconity->gkeys[grammar->key] = grammar;
+            } else {
                 grammar->key = draconity->gkeys.size();
-                draconity->gkeys.push_back(grammar);
+                // TODO: This is probably not correct. Doesn't match the original C.
+                draconity->gkeys[grammar->key] = grammar;
             }
             draconity->keylock.unlock();
             // printf("%d\n", _DSXGrammar_SetApplicationName(grammar->handle, grammar->name));
