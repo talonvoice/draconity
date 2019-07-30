@@ -20,10 +20,6 @@
 
 // #define DEBUG
 
-#if CPP_PORT_IS_DONE // unclear whether draconity.h's _engine macro usage here is intentional - suspect not though
-drg_engine *_engine = NULL;
-#endif //CPP_PORT_IS_DONE
-
 
 #include "api.h" // this defines the function pointers
 
