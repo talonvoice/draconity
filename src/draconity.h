@@ -83,7 +83,6 @@ class Draconity {
         Grammar *grammar_get(const char *name);
         void grammar_set(Grammar *grammar);
         int grammar_enable(Grammar *g);
-        int grammar_unload(Grammar *g);
 
         std::string set_dragon_enabled(bool enabled);
 

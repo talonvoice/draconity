@@ -389,7 +389,7 @@ static bson_t *handle_message(const uint8_t *msg, uint32_t msglen) {
         } else if (streq(cmd, "g.unload")) {
             if (!draconity->ready) goto not_ready;
             if (!grammar) goto no_grammar;
-            int rc = draconity->grammar_unload(grammar);
+            int rc = grammar_unload(grammar);
             if (rc) {
                 errstream << "error unloading grammar: " << rc;
                 errmsg = errstream.str();
@@ -412,9 +412,13 @@ static bson_t *handle_message(const uint8_t *msg, uint32_t msglen) {
             }
             if (grammar) {
                 draconity_logf("warning: reloading \"%s\"", name);
-                errmsg = draconity->grammar_unload(grammar);
-                if (errmsg.size() > 0)
+                // TODO: Encapsulate in Grammar object
+                int rc = grammar_unload(grammar);
+                if (rc) {
+                    errstream << "error unloading grammar: " << rc;
+                    errmsg = errstream.str();
                     goto end;
+                }
             }
             grammar = new Grammar(name, main_rule);
             // FIXME: this still needs to be cleaned up as part of porting to C++
