@@ -50,6 +50,9 @@ target_link_libraries(draconity m dl pthread ${UV} ${ZYDIS} ${BSON})
 if(APPLE)
     target_link_libraries(draconity -F/System/Library/PrivateFrameworks "-framework CoreSymbolication -framework AppKit")
 endif()
+if(MINGW)
+    target_link_libraries(draconity ws2_32 psapi iphlpapi userenv)
+endif()
 
 set_target_properties(draconity PROPERTIES
     CXX_STANDARD 17
