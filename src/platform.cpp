@@ -126,7 +126,9 @@ int Platform::loadSymbols(std::string moduleName, std::list<SymbolLoad> loads) {
     }
     for (auto &symbol_load : loads) {
         FARPROC addr = GetProcAddress(module, symbol_load.name.c_str());
-        symbol_load.setAddr(reinterpret_cast<void *>(addr));
+        if (addr != 0) {
+            symbol_load.setAddr(reinterpret_cast<void *>(addr));
+        }
     }
     for (auto &symbol_load : loads) {
         if (!symbol_load.loaded) {
@@ -144,7 +146,9 @@ int Platform::applyHooks(std::string moduleName, std::list<CodeHook> hooks) {
     }
     for (auto &hook : hooks) {
         FARPROC addr = GetProcAddress(module, hook.name.c_str());
-        hook.setup(reinterpret_cast<void *>(addr));
+        if (addr != 0) {
+            hook.setup(reinterpret_cast<void *>(addr));
+        }
     }
     for (auto &hook : hooks) {
         if (!hook.active) {
