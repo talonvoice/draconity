@@ -263,21 +263,6 @@ static int DSXEngine_LoadGrammar(drg_engine *engine,
     return orig_DSXEngine_LoadGrammar(engine, format, data, grammar);
 }
 
-
-/* Helper function to create a typed CodeHook and automatically infer F
-
-   F doesn't need to be explicitly provided. It will be inferred from the type
-   of `target` & `*original` (target and *original must both have the same
-   type).
-
-   Please note, since this creates a new CodeHook, it will need to be manually
-   deleted when it is no longer needed.
-*/
-template <typename F>
-CodeHook<F> *makeCodeHook(std::string name, F target, F *original) {
-	return new CodeHook<F>(name, target, original);
-}
-
 #define h makeCodeHook(#name, &_##name)
 static std::list<CodeHookBase*> dragon_hooks = {
     h(DSXEngine_New),
@@ -286,18 +271,6 @@ static std::list<CodeHookBase*> dragon_hooks = {
     h(DSXEngine_LoadGrammar),
 };
 #undef h
-
-/* Helper function to create a typed SymbolLoad and automatically infer F
-
-   F will be inferred by the type of the value pointed to by `ptr`.
-
-   Please note, since this creates a new SymbolLoad, it will need to be manually
-   deleted when no longer needed.
-*/
-template <typename F>
-SymbolLoad<F> *makeSymbolLoad(std::string name, F *ptr) {
-    return new SymbolLoad<F>(name, ptr);
-}
 
 #define s makeSymbolLoad(#name, &_##name)
 static std::list<SymbolLoadBase*> server_syms {
