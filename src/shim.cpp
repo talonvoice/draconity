@@ -111,7 +111,7 @@ static void engine_setup(drg_engine *engine) {
     ret = _DSXEngine_RegisterMimicDoneCallback(engine, draconity_mimic_done, NULL, &cb_key);
     if (ret) draconity_logf("error adding mimic done callback: %d", ret);
 
-    ret = _DSXEngine_RegisterPausedCallback(engine, draconity_paused, "paused?", NULL, &cb_key);
+    ret = _DSXEngine_RegisterPausedCallback(engine, draconity_paused, (void*)"paused?", NULL, &cb_key);
     if (ret) draconity_logf("error adding paused callback: %d", ret);
 
     ret = _DSXEngine_SetBeginPhraseCallback(engine, draconity_phrase_begin, NULL, &cb_key);
