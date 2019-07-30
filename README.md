@@ -16,10 +16,10 @@ Draconity is in the process of being ported to Windows (via Linux); here's what'
 - [x] Implement libuv-based network transport in Draconity
 - [x] Connect libuv-based network tranport to Draconity's logic
 - [x] Remove MacOS-only cruft (audit `__APPLE__` flag)
-- [ ] Complete C++ port (remove `CPP_PORT_IS_DONE` flag)
+- [x] Complete C++ port (remove `CPP_PORT_IS_DONE` flag)
 - [ ] Audit all the remaining FIXMEs and TODOs (probably some more porting work there)
-- [ ] Get it building on Windows
-- [ ] Implement the shim/code hooking of Dragon portion for Windows
+- [x] Get it building on Windows
+- [x] Implement the shim/code hooking of Dragon portion for Windows
 
 Nice to haves:
 
