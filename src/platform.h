@@ -2,8 +2,8 @@
 
 #include <list>
 
-#include "code_hook.h"
 #include "symbol_load.h"
+#include "code_hook.h"
 
 class Platform {
 public:
