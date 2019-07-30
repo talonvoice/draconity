@@ -418,7 +418,6 @@ static bson_t *handle_message(const uint8_t *msg, uint32_t msglen) {
             }
             grammar = new Grammar(name, main_rule);
             // FIXME: this still needs to be cleaned up as part of porting to C++
-            draconity->grammar_load(grammar);
             dsx_dataptr dp = {.data = (void *)data_buf, .size = data_len};
 
             int ret = _DSXEngine_LoadGrammar(_engine, 1 /*cfg*/, &dp, &grammar->handle);
