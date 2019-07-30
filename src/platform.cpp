@@ -4,6 +4,9 @@
 
 #include <unistd.h>
 #include <sys/mman.h>
+extern "C" {
+#include "CoreSymbolication.h"
+}
 
 size_t Platform::pageSize() {
     return getpagesize();
@@ -27,6 +30,67 @@ void Platform::protectRW(void *addr, size_t size) {
 void Platform::protectRX(void *addr, size_t size) {
     mprotect(addr, size, PROT_READ|PROT_EXEC);
 }
+
+static int walk_image(std::string image, std::function<void(std::string, void *, size_t, bool)> cb) {
+    CSSymbolicatorRef csym = CSSymbolicatorCreateWithTask(mach_task_self());
+    CSSymbolOwnerRef owner = CSSymbolicatorGetSymbolOwnerWithNameAtTime(csym, image.c_str(), kCSNow);
+    if (CSIsNull(owner)) {
+        printf("  [!] IMAGE NOT FOUND: %s\n", image.c_str());
+        CSRelease(csym);
+        return 1;
+    }
+    CSSymbolOwnerForeachSymbol(owner, ^int (CSSymbolRef sym) {
+        const char *name = CSSymbolGetName(sym);
+        if (name) {
+            CSRange range = CSSymbolGetRange(sym);
+            const char *stub = "DYLD-STUB$$";
+            bool is_stub = (strncmp(name, stub, strlen(stub)) == 0);
+            if (is_stub) {
+                name += strlen(stub);
+            }
+            cb(name, (void *)range.addr, range.size, is_stub);
+            return 0;
+        }
+        return 1;
+    });
+    CSRelease(csym);
+    return 0;
+}
+
+int Platform::loadSymbols(std::string moduleName, std::list<SymbolLoad> loads) {
+    walk_image(moduleName, [loads](std::string name, void *addr, size_t size, bool is_stub) {
+        for (auto symbol_load : loads) {
+            if (name == symbol_load.name) {
+                symbol_load.setAddr(addr);
+            }
+        }
+    });
+    for (auto symbol_load : loads) {
+        if (!symbol_load.loaded) {
+            printf("[!] Failed to load symbol %s\n", symbol_load.name.c_str());
+        }
+    }
+    return 0;
+};
+
+int Platform::applyHooks(std::string moduleName, std::list<CodeHook> hooks) {
+    walk_image(moduleName, [hooks](std::string name, void *addr, size_t size, bool is_stub) {
+        for (auto hook : hooks) {
+            if (name == hook.name) {
+                if (is_stub) {
+                    printf("STUB! %s\n", name.c_str());
+                }
+                hook.setup(addr);
+            }
+        }
+    });
+    for (auto hook : hooks) {
+        if (!hook.active) {
+            printf("[!] Failed to hook %s\n", hook.name.c_str());
+        }
+    }
+    return 0;
+};
 
 #else // windows
 
@@ -62,11 +126,11 @@ int Platform::loadSymbols(std::string moduleName, std::list<SymbolLoad> loads) {
         return 1;
     }
     for (auto symbol_load : loads) {
-        symbol_load->load(module);
+        symbol_load.load(module);
     }
     for (auto symbol_load : loads) {
-        if (!symbol_load->loaded) {
-            printf("[!] Failed to load symbol %s\n", symbol_load->name.c_str());
+        if (!symbol_load.loaded) {
+            printf("[!] Failed to load symbol %s\n", symbol_load.name.c_str());
         }
     }
     return 0;
@@ -79,11 +143,11 @@ int Platform::applyHooks(std::string moduleName, std::list<CodeHook> hooks) {
         return 1;
     }
     for (auto hook : hooks) {
-        hook->setup(module);
+        hook.setup(module);
     }
     for (auto hook : hooks) {
-        if (!hook->active) {
-            printf("[!] Failed to hook %s\n", hook->name.c_str());
+        if (!hook.active) {
+            printf("[!] Failed to hook %s\n", hook.name.c_str());
         }
     }
     return 0;
