@@ -3,7 +3,15 @@
 
 #include "draconity.h"
 
-Draconity::Draconity() {}
+void draconity_install();
+static Draconity *instance = NULL;
+Draconity *Draconity::shared() {
+    if (!instance) {
+        instance = new Draconity;
+        draconity_install();
+    }
+    return instance;
+}
 
 std::string Draconity::gkey_to_name(uintptr_t gkey) {
     std::string ret;

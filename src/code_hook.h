@@ -11,8 +11,14 @@ public:
         this->original = original;
         this->origData = (uint8_t *)calloc(1, jmpSize());
         this->patchData = (uint8_t *)calloc(1, jmpSize());
-        this->original = original;
-        this->active = false;
+    }
+    CodeHook(const CodeHook &obj) {
+        this->name = obj.name;
+        this->active = obj.active;
+        this->target = obj.target;
+        this->original = obj.original;
+        this->origData = (uint8_t *)calloc(1, jmpSize());
+        this->patchData = (uint8_t *)calloc(1, jmpSize());
     }
     ~CodeHook() {
         free(origData);
@@ -20,6 +26,7 @@ public:
     }
     int setup(void *addr);
 private:
+    CodeHook& operator=(const CodeHook &obj);
     bool apply() {
         return this->write(this->addr, this->patchData, this->jmpSize());
     }

@@ -220,6 +220,7 @@ int DSXGrammar_RegisterPhraseHypothesisCallback(drg_grammar *grammar, void *cb, 
 */
 
 
+extern "C" {
 drg_engine *(*orig_DSXEngine_New)();
 static drg_engine *DSXEngine_New() {
     drg_engine *engine = orig_DSXEngine_New();
@@ -242,21 +243,15 @@ static int DSXEngine_GetMicState(drg_engine *engine, int64_t *state) {
     return orig_DSXEngine_GetMicState(engine, state);
 }
 
-// TODO: I've manually specified various types here. Revert them to void?
-int (*orig_DSXEngine_LoadGrammar)(drg_engine *engine,
-                                  int format,
-                                  void *data,
-                                  void **grammar);
-static int DSXEngine_LoadGrammar(drg_engine *engine,
-                                 int format,
-                                 void *data,
-                                 void **grammar) {
+int (*orig_DSXEngine_LoadGrammar)(drg_engine *engine, int format, void *data, void **grammar);
+static int DSXEngine_LoadGrammar(drg_engine *engine, int format, void *data, void **grammar) {
     engine_acquire(engine, false);
     return orig_DSXEngine_LoadGrammar(engine, format, data, grammar);
 }
+} // extern "C"
 
 #define h(name) makeCodeHook(#name, name, &orig_##name)
-static std::list<CodeHook> dragon_hooks = {
+static std::list<CodeHook> server_hooks = {
     h(DSXEngine_New),
     h(DSXEngine_Create),
     h(DSXEngine_GetMicState),
@@ -323,15 +318,20 @@ static std::list<SymbolLoad> server_syms {
 };
 #undef s
 
-static void draconity_install() {
+void draconity_install() {
+#ifdef DEBUG
+    int log = open("/tmp/draconity.log", O_CREAT | O_WRONLY | O_APPEND, 0644);
+    dup2(log, 1);
+    dup2(log, 2);
+#endif
     printf("[+] draconity starting\n");
     int hooked = 0;
-#ifdef APPLE
+#ifdef __APPLE__
     hooked |= Platform::loadSymbols("server.so", server_syms);
-    hooked |= Platform::applyHooks("Dragon", dragon_hooks);
+    hooked |= Platform::applyHooks("server.so", server_hooks);
 #else
     hooked |= Platform::loadSymbols("server.dll", server_syms);
-    hooked |= Platform::applyHooks("server.dll", dragon_hooks);
+    hooked |= Platform::applyHooks("server.dll", server_hooks);
 #endif
     if (hooked != 0) {
         printf("[!] draconity failed to hook!");
@@ -340,12 +340,4 @@ static void draconity_install() {
     draconity_init();
 }
 
-__attribute__((constructor))
-void cons() {
-#ifdef DEBUG
-    int log = open("/tmp/draconity.log", O_CREAT | O_WRONLY | O_APPEND, 0644);
-    dup2(log, 1);
-    dup2(log, 2);
-#endif
-    draconity_install();
-}
+auto _ = Draconity::shared();

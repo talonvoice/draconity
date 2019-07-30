@@ -25,12 +25,12 @@ static void dis_mem(uint8_t *addr, size_t size) {
     char buf[256];
     while (ZYDIS_SUCCESS(ZydisDecoderDecodeBuffer(&dis, addr + offset, size - offset, (uint64_t)addr + offset, &ins))) {
         ZydisFormatterFormatInstruction(&dis_fmt, &ins, buf, sizeof(buf));
+        printf("%016llx %s\n", ins.instrAddress, buf);
         offset += ins.length;
     }
 }
 
 int CodeHook::setup(void *addr) {
-    printf("[+] hooking %s (%p)\n", this->name.c_str(), addr);
     this->addr = addr;
 
     size_t page_mask = Platform::pageSize() - 1;
@@ -49,6 +49,7 @@ int CodeHook::setup(void *addr) {
 
     *(this->original) = trampoline;
     this->active = true;
+    printf("[+] hooked %s (%p -> %p), orig at %p\n", this->name.c_str(), addr, target, trampoline);
     return 0;
 }
 
@@ -59,7 +60,7 @@ bool CodeHook::write(void *addr, void *data, size_t size) {
     return true;
 }
 
-#ifdef B64
+#if _WIN64 || __x86_64__
 
 void CodeHook::jmpPatch(uint8_t *buf, void *target) {
     uint8_t jmp[12] = { 0x48, 0xb8, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xe0 };

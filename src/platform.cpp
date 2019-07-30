@@ -13,7 +13,7 @@ size_t Platform::pageSize() {
 }
 
 void *Platform::mmap(size_t size) {
-    void *addr = ::mmap(NULL, size, PROT_READ|PROT_WRITE, MAP_ANONYMOUS, -1, 0);
+    void *addr = ::mmap(NULL, size, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
     if (addr == MAP_FAILED)
         return NULL;
     return addr;
@@ -24,14 +24,20 @@ void Platform::munmap(void *addr, size_t size) {
 }
 
 void Platform::protectRW(void *addr, size_t size) {
-    mprotect(addr, size, PROT_READ|PROT_WRITE);
+    uint64_t page_mask = pageSize() - 1;
+    void *prot_addr = (void *)((uintptr_t)addr &~page_mask);
+    size_t prot_size = (size + page_mask) & ~page_mask;
+    mprotect(prot_addr, prot_size, PROT_READ|PROT_WRITE);
 }
 
 void Platform::protectRX(void *addr, size_t size) {
-    mprotect(addr, size, PROT_READ|PROT_EXEC);
+    uint64_t page_mask = pageSize() - 1;
+    void *prot_addr = (void *)((uintptr_t)addr &~page_mask);
+    size_t prot_size = (size + page_mask) & ~page_mask;
+    mprotect(prot_addr, prot_size, PROT_READ|PROT_EXEC);
 }
 
-static int walk_image(std::string image, std::function<void(std::string, void *, size_t, bool)> cb) {
+static int walk_image(std::string image, std::function<void(std::string, void *, size_t)> cb) {
     CSSymbolicatorRef csym = CSSymbolicatorCreateWithTask(mach_task_self());
     CSSymbolOwnerRef owner = CSSymbolicatorGetSymbolOwnerWithNameAtTime(csym, image.c_str(), kCSNow);
     if (CSIsNull(owner)) {
@@ -43,12 +49,7 @@ static int walk_image(std::string image, std::function<void(std::string, void *,
         const char *name = CSSymbolGetName(sym);
         if (name) {
             CSRange range = CSSymbolGetRange(sym);
-            const char *stub = "DYLD-STUB$$";
-            bool is_stub = (strncmp(name, stub, strlen(stub)) == 0);
-            if (is_stub) {
-                name += strlen(stub);
-            }
-            cb(name, (void *)range.addr, range.size, is_stub);
+            cb(name, (void *)range.addr, range.size);
             return 0;
         }
         return 1;
@@ -58,14 +59,14 @@ static int walk_image(std::string image, std::function<void(std::string, void *,
 }
 
 int Platform::loadSymbols(std::string moduleName, std::list<SymbolLoad> loads) {
-    walk_image(moduleName, [loads](std::string name, void *addr, size_t size, bool is_stub) {
-        for (auto symbol_load : loads) {
+    walk_image(moduleName, [&loads](std::string name, void *addr, size_t size) {
+        for (auto &symbol_load : loads) {
             if (name == symbol_load.name) {
                 symbol_load.setAddr(addr);
             }
         }
     });
-    for (auto symbol_load : loads) {
+    for (auto &symbol_load : loads) {
         if (!symbol_load.loaded) {
             printf("[!] Failed to load symbol %s\n", symbol_load.name.c_str());
         }
@@ -74,17 +75,14 @@ int Platform::loadSymbols(std::string moduleName, std::list<SymbolLoad> loads) {
 };
 
 int Platform::applyHooks(std::string moduleName, std::list<CodeHook> hooks) {
-    walk_image(moduleName, [hooks](std::string name, void *addr, size_t size, bool is_stub) {
-        for (auto hook : hooks) {
+    walk_image(moduleName, [&hooks](std::string name, void *addr, size_t size) {
+        for (auto &hook : hooks) {
             if (name == hook.name) {
-                if (is_stub) {
-                    printf("STUB! %s\n", name.c_str());
-                }
                 hook.setup(addr);
             }
         }
     });
-    for (auto hook : hooks) {
+    for (auto &hook : hooks) {
         if (!hook.active) {
             printf("[!] Failed to hook %s\n", hook.name.c_str());
         }

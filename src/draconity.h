@@ -62,39 +62,46 @@ class ForeignGrammar {
 };
 
 class Draconity {
-    public:
-        Draconity();
-        static Draconity *shared() {
-            static Draconity *shared = NULL;
-            if (!shared) shared = new Draconity();
-            return shared;
-        }
+public:
+    static Draconity *shared();
 
-        std::string gkey_to_name(uintptr_t gkey);
+    std::string gkey_to_name(uintptr_t gkey);
 
-        Grammar *grammar_get(const char *name);
-        void grammar_set(Grammar *grammar);
+    Grammar *grammar_get(const char *name);
+    void grammar_set(Grammar *grammar);
 
-        std::string set_dragon_enabled(bool enabled);
+    std::string set_dragon_enabled(bool enabled);
+private:
+    Draconity() {
+        micstate = NULL;
+        ready = false;
+        start_ts = 0;
+        serial = 0;
+        dragon_enabled = false;
+        mimic_success = false;
+        engine = NULL;
+    }
+    Draconity(const Draconity &);
+    Draconity& operator=(const Draconity &);
 
-        std::mutex keylock;
-        std::map<std::string, Grammar *> grammars;
-        std::map<uintptr_t, Grammar *> gkeys;
-        std::list<reusekey *> gkfree;
+public:
+    std::mutex keylock;
+    std::map<std::string, Grammar *> grammars;
+    std::map<uintptr_t, Grammar *> gkeys;
+    std::list<reusekey *> gkfree;
 
-        const char *micstate;
-        bool ready;
-        uint64_t start_ts, serial;
+    const char *micstate;
+    bool ready;
+    uint64_t start_ts, serial;
 
-        std::list<ForeignGrammar *> dragon_grammars;
-        std::mutex dragon_lock;
-        bool dragon_enabled;
+    std::list<ForeignGrammar *> dragon_grammars;
+    std::mutex dragon_lock;
+    bool dragon_enabled;
 
-        std::mutex mimic_lock;
-        std::condition_variable mimic_cond;
-        bool mimic_success;
-        drg_engine *engine;
-    private:
+    std::mutex mimic_lock;
+    std::condition_variable mimic_cond;
+    bool mimic_success;
+    drg_engine *engine;
 };
 
 #define draconity (Draconity::shared())
