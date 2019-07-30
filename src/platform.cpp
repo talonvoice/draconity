@@ -110,11 +110,12 @@ void Platform::munmap(void *addr, size_t size) {
 
 void Platform::protectRW(void *addr, size_t size) {
     DWORD oldProtect;
-    VirtualProtect(addr, size, PAGE_EXECUTE_READ, &oldProtect);
+    VirtualProtect(addr, size, PAGE_READWRITE, &oldProtect);
 }
 
 void Platform::protectRX(void *addr, size_t size) {
-    mprotect(addr, size, PROT_READ|PROT_EXEC);
+    DWORD oldProtect;
+    VirtualProtect(addr, size, PAGE_EXECUTE_READ, &oldProtect);
 }
 
 int Platform::loadSymbols(std::string moduleName, std::list<SymbolLoad> loads) {
