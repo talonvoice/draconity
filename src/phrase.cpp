@@ -30,7 +30,6 @@ static void result_to_bson(bson_t *obj, dsx_result *result) {
 
     uint32_t paths;
     size_t needed = 0;
-#if RUN_IN_DRAGON
     int rc = _DSXResult_BestPathWord(result, 0, &paths, 1, &needed);
     if (rc == 33) {
         uint32_t *paths = new uint32_t[needed];
@@ -58,7 +57,6 @@ static void result_to_bson(bson_t *obj, dsx_result *result) {
         }
         delete []paths;
     }
-#endif //RUN_IN_DRAGON
     bson_append_array_end(obj, &words);
 }
 
@@ -83,9 +81,7 @@ extern "C" int phrase_publish(void *key, dsx_end_phrase *endphrase, const char *
     }
     draconity_publish("phrase", &obj);
 end:
-#if RUN_IN_DRAGON
     _DSXResult_Destroy(endphrase->result);
-#endif //RUN_IN_DRAGON
     return 0;
 }
 

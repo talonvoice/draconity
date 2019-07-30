@@ -157,7 +157,6 @@ static bson_t *handle_message(const uint8_t *msg, uint32_t msglen) {
         BSON_APPEND_UTF8(response, "cmd", "pong");
         BSON_APPEND_INT32(response, "pingpong-counter", counter);
         resp = response;
-#if RUN_IN_DRAGON
     } else if (cmd[0] == 'w') {
         if (!draconity->ready) goto not_ready;
         if (!_DSXEngine_EnumWords ||
@@ -533,7 +532,6 @@ static bson_t *handle_message(const uint8_t *msg, uint32_t msglen) {
             goto end;
         }
         resp = success_msg();
-#endif //RUN_IN_DRAGON
     } else {
         goto unsupported_command;
     }
@@ -605,7 +603,6 @@ void draconity_attrib_changed(int key, dsx_attrib *attrib) {
         draconity->micstate = "on";
     } else if (streq(attr, "MICSTATE")) {
         int64_t micstate = 0;
-#if RUN_IN_DRAGON
         _DSXEngine_GetMicState(_engine, &micstate);
         const char *name;
         if (micstate >= 0 && micstate <= 5) {
@@ -613,9 +610,6 @@ void draconity_attrib_changed(int key, dsx_attrib *attrib) {
         } else {
             name = "invalid";
         }
-#else //RUN_IN_DRAGON
-        const char *name = "nodragon";
-#endif
         if (!draconity->micstate || streq(draconity->micstate, name)) {
             draconity->micstate = name;
             draconity_publish("status", BCON_NEW("cmd", BCON_UTF8("mic"), "status", BCON_UTF8(name)));
@@ -640,11 +634,7 @@ void draconity_mimic_done(int key, dsx_mimic *mimic) {
 }
 
 void draconity_paused(int key, dsx_paused *paused) {
-#if RUN_IN_DRAGON
     _DSXEngine_Resume(_engine, paused->token);
-#else
-    printf("draconity not running in dragon so cannot call _DSXEngine_Resume() from draconity_paused()\n");
-#endif
 }
 
 int draconity_phrase_begin(void *key, void *data) {

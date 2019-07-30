@@ -28,7 +28,6 @@
 #include "api.h" // this defines the function pointers
 
 
-#if RUN_IN_DRAGON
 int draconity_set_param(const char *key, const char *value) {
     if (!_engine) return -1;
     void *param = _DSXEngine_GetParam(_engine, key);
@@ -62,6 +61,8 @@ static char *homedir() {
         return NULL;
     }
 }
+#else
+#error "Unsupported OS for homedir"
 #endif // defined(_WIN32) || defined(__MINGW32__) || defined(__MINGW64__)
 
 typedef struct {
@@ -205,7 +206,6 @@ int DSXGrammar_SetList(drg_grammar *grammar, const char *name, dsx_dataptr *data
     draconity->dragon_lock.unlock();
     return ret;
 }
-#endif //RUN_IN_DRAGON
 
 /*
 int DSXGrammar_RegisterEndPhraseCallback(drg_grammar *grammar, void *cb, void *user, unsigned int *key) {
