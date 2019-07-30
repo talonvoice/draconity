@@ -264,7 +264,7 @@ static int DSXEngine_LoadGrammar(drg_engine *engine,
 }
 
 #define h makeCodeHook(#name, &_##name)
-static std::list<CodeHookBase*> dragon_hooks = {
+static std::list<CodeHookBase> dragon_hooks = {
     h(DSXEngine_New),
     h(DSXEngine_Create),
     h(DSXEngine_GetMicState),
@@ -273,7 +273,7 @@ static std::list<CodeHookBase*> dragon_hooks = {
 #undef h
 
 #define s makeSymbolLoad(#name, &_##name)
-static std::list<SymbolLoadBase*> server_syms {
+static std::list<SymbolLoadBase> server_syms {
     s(DSXEngine_Create),
     s(DSXEngine_New),
 
