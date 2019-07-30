@@ -14,6 +14,7 @@
 #include "server.h"
 #include "draconity.h"
 
+#include "codehook.h"
 #include "symbolicator.h"
 
 
@@ -227,18 +228,61 @@ int DSXGrammar_RegisterPhraseHypothesisCallback(drg_grammar *grammar, void *cb, 
 */
 
 
-#define h(_name) {.handle=NULL, .name=#_name, .target=_name, .offset=0, .active=false, 0}
-#define ho(_name, _handle) {.handle=_handle, .name=#_name, .target=_name, .offset=0, .active=false, 0}
-static code_hook dragon_hooks[] = {
-#if RUN_IN_DRAGON
-    ho(DSXEngine_New, &DSXEngine_New_hook),
-    ho(DSXEngine_Create, &DSXEngine_Create_hook),
-    ho(DSXEngine_GetMicState, &DSXEngine_GetMicState_hook),
-    ho(DSXEngine_LoadGrammar, &DSXEngine_LoadGrammar_hook),
-#endif //RUN_IN_DRAGON
-    {0},
+drg_engine* (*orig_DSXEngine_New)();
+static drg_engine* DSXEngine_New() {
+    drg_engine *engine = orig_DSXEngine_New();
+    draconity_logf("DSXEngine_New() = %p", engine);
+    engine_acquire(engine, true);
+    return _engine;
+}
+
+int (*orig_DSXEngine_Create)(char *s, uint64_t val, drg_engine **engine);
+static int DSXEngine_Create(char *s, uint64_t val, drg_engine **engine) {
+    int ret = orig_DSXEngine_Create(s, val, engine);
+    draconity_logf("DSXEngine_Create(%s, %llu, &%p) = %d", s, val, engine, ret);
+    engine_acquire(*engine, true);
+    return ret;
+}
+
+int (*orig_DSXEngine_GetMicState)(drg_engine *engine, int64_t *state);
+static int DSXEngine_GetMicState(drg_engine *engine, int64_t *state) {
+    engine_acquire(engine, false);
+    return orig_DSXEngine_GetMicState(engine, state);
+}
+
+// TODO: I've manually specified various types here. Revert them to void?
+int (*orig_DSXEngine_LoadGrammar)(drg_engine* engine,
+                                  int format,
+                                  void *data,
+                                  void **grammar);
+static int DSXEngine_LoadGrammar(drg_engine *engine,
+                                 int format,
+                                 void *data,
+                                 void **grammar) {
+    engine_acquire(engine, false);
+    return orig_DSXEngine_LoadGrammar(engine, format, data, grammar);
+}
+
+
+/* Helper function to create a typed CodeHook and automatically infer F
+
+   F doesn't need to be explicitly provided. It will be inferred from the type
+   of `target` & `*original` (target and *original must both have the same
+   type).
+
+   Please note, since this creates a new CodeHook, it will need to be manually
+   deleted when it is no longer needed.
+*/
+template <typename F> CodeHook<F> *makeCodeHook(std::string name, F target, F *original) {
+	return new CodeHook<F>(name, target, original);
+}
+
+static std::list<CodeHookBase*> dragon_hooks = {
+    makeCodeHook("DSXEngine_New", DSXEngine_New, &orig_DSXEngine_New),
+    makeCodeHook("DSXEngine_Create", DSXEngine_Create, &orig_DSXEngine_Create),
+    makeCodeHook("DSXEngine_GetMicState", DSXEngine_GetMicState, &orig_DSXEngine_GetMicState),
+    makeCodeHook("DSXEngine_LoadGrammar", DSXEngine_LoadGrammar, &orig_DSXEngine_LoadGrammar),
 };
-#undef h
 
 /* Helper function to create a typed SymbolLoad and automatically infer F
 
