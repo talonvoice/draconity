@@ -65,4 +65,6 @@ You should see Draconity spew some output as it loads, then `sleep` will exit af
 Windows
 -------
 
-Yet to be sorted out, help welcome.
+Just placeholder instructions for now:
+
+It's possible to build on Windows with no errors or warnings. Build on MinGW (use MSYS2) with CMake. Please see https://github.com/jcaw/build-helpers for build scripts specific to a particular path layout.
