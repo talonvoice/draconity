@@ -21,16 +21,16 @@ DLAPI int (*_DSXEngine_LoadGrammar)(drg_engine *engine, int type, dsx_dataptr *d
 DLAPI void *(*_DSXEngine_GetCurrentSpeaker)(drg_engine *engine);
 DLAPI int (*_DSXEngine_GetMicState)(drg_engine *engine, int64_t *state);
 DLAPI int (*_DSXEngine_Mimic)(drg_engine *engine, int unk1, unsigned int count, dsx_dataptr *data, unsigned int unk2, int type);
-DLAPI int (*_DSXEngine_RegisterAttribChangedCallback)(drg_engine *engine, void *cb, void *user, unsigned int *key);
-DLAPI int (*_DSXEngine_RegisterMimicDoneCallback)(drg_engine *engine, void *cb, void *user, unsigned int *key);
-DLAPI int (*_DSXEngine_RegisterPausedCallback)(drg_engine *engine, void *cb, void *user, char *name, unsigned int *key);
+DLAPI int (*_DSXEngine_RegisterAttribChangedCallback)(drg_engine *engine,  void (*cb)(int, dsx_attrib*), void *user, unsigned int *key);
+DLAPI int (*_DSXEngine_RegisterMimicDoneCallback)(drg_engine *engine, void (*cb)(int, dsx_mimic*), void *user, unsigned int *key);
+DLAPI int (*_DSXEngine_RegisterPausedCallback)(drg_engine *engine, void (*cb)(int, dsx_paused*), void *user, char *name, unsigned int *key);
 
 DLAPI int (*_DSXEngine_SetStringValue)(drg_engine *engine, void *param, const char *value);
 DLAPI void *(*_DSXEngine_GetValue)(drg_engine *engine, void *param, void **type, void *value_out, unsigned int size, unsigned int *size_out);
 DLAPI void *(*_DSXEngine_GetParam)(drg_engine *engine, const char *key);
 DLAPI void (*_DSXEngine_DestroyParam)(drg_engine *engine, void *param);
 
-DLAPI int (*_DSXEngine_SetBeginPhraseCallback)(drg_engine *engine, void *cb, void *user, unsigned int *key);
+DLAPI int (*_DSXEngine_SetBeginPhraseCallback)(drg_engine *engine, int (*cb)(void*, void*), void *user, unsigned int *key);
 DLAPI int (*_DSXEngine_SetEndPhraseCallback)(drg_engine *engine, void *cb, void *user, unsigned int *key);
 
 DLAPI int (*_DSXEngine_Pause)(drg_engine *engine);
