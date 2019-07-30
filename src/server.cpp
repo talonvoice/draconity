@@ -258,30 +258,7 @@ static bson_t *handle_message(const uint8_t *msg, uint32_t msglen) {
         if (streq(cmd, "g.update")) {
             if (!draconity->ready) goto not_ready;
             if (streq(name, "dragon")) {
-                draconity->set_dragon_enabled(enabled);
-                /*
-                draconity->dragon_lock.lock();
-                if (has_enabled && enabled != state.dragon_enabled) {
-                    tack_foreach(&state.dragon_grammars, fg) {
-                        int rc;
-                        if (enabled) {
-                            if ((rc = _DSXGrammar_Activate(fg->grammar, fg->unk1, fg->unk2, fg->main_rule))) {
-                                errstream << "error activating grammar: " << rc;
-                                errmsg = errstream.str();
-                                break;
-                            }
-                        } else {
-                            if ((rc =_DSXGrammar_Deactivate(grammar->handle, fg->unk1, grammar->main_rule))) {
-                                errstream << "error deactivating grammar: " << rc;
-                                errmsg = errstream.str();
-                                break;
-                            }
-                        }
-                    }
-                    state.dragon_enabled = enabled;
-                }
-                draconity->dragon_lock.unlock();
-                */
+                errmsg = draconity->set_dragon_enabled(has_enabled && enabled);
                 if (errmsg.size() == 0) resp = success_msg();
                 goto end;
             }

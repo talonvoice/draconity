@@ -1,3 +1,6 @@
+#include <string>
+#include <sstream>
+
 #include "draconity.h"
 
 Draconity::Draconity() {}
@@ -18,6 +21,33 @@ Grammar *Draconity::grammar_get(const char *name) {
 
 void Draconity::grammar_set(Grammar *grammar) {
     this->grammars[grammar->name] = grammar;
+}
+
+std::string Draconity::set_dragon_enabled(bool enabled) {
+    std::stringstream errstream;
+    std::string errmsg;
+    this->dragon_lock.lock();
+    if (enabled != this->dragon_enabled) {
+        for (ForeignGrammar *fg : this->dragon_grammars) {
+            int rc;
+            if (enabled) {
+                if ((rc = fg->activate())) {
+                    errstream << "error activating grammar: " << rc;
+                    errmsg = errstream.str();
+                    break;
+                }
+            } else {
+                if ((rc = fg->deactivate())) {
+                    errstream << "error deactivating grammar: " << rc;
+                    errmsg = errstream.str();
+                    break;
+                }
+            }
+        }
+        this->dragon_enabled = enabled;
+    }
+    this->dragon_lock.unlock();
+    return "";
 }
 
 int Grammar::disable(std::string *errmsg) {
