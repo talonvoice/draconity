@@ -110,11 +110,12 @@ void Platform::munmap(void *addr, size_t size) {
 
 void Platform::protectRW(void *addr, size_t size) {
     DWORD oldProtect;
-    VirtualProtect(addr, size, PAGE_EXECUTE_READ, &oldProtect);
+    VirtualProtect(addr, size, PAGE_READWRITE, &oldProtect);
 }
 
 void Platform::protectRX(void *addr, size_t size) {
-    mprotect(addr, size, PROT_READ|PROT_EXEC);
+    DWORD oldProtect;
+    VirtualProtect(addr, size, PAGE_EXECUTE_READ, &oldProtect);
 }
 
 int Platform::loadSymbols(std::string moduleName, std::list<SymbolLoad> loads) {
@@ -123,10 +124,13 @@ int Platform::loadSymbols(std::string moduleName, std::list<SymbolLoad> loads) {
         printf("[!] Failed to open module %s\n", moduleName.c_str());
         return 1;
     }
-    for (auto symbol_load : loads) {
-        symbol_load.load(module);
+    for (auto &symbol_load : loads) {
+        FARPROC addr = GetProcAddress(module, symbol_load.name.c_str());
+        if (addr != 0) {
+            symbol_load.setAddr(reinterpret_cast<void *>(addr));
+        }
     }
-    for (auto symbol_load : loads) {
+    for (auto &symbol_load : loads) {
         if (!symbol_load.loaded) {
             printf("[!] Failed to load symbol %s\n", symbol_load.name.c_str());
         }
@@ -140,10 +144,13 @@ int Platform::applyHooks(std::string moduleName, std::list<CodeHook> hooks) {
         printf("[!] Failed to open module %s\n", moduleName.c_str());
         return 1;
     }
-    for (auto hook : hooks) {
-        hook.setup(module);
+    for (auto &hook : hooks) {
+        FARPROC addr = GetProcAddress(module, hook.name.c_str());
+        if (addr != 0) {
+            hook.setup(reinterpret_cast<void *>(addr));
+        }
     }
-    for (auto hook : hooks) {
+    for (auto &hook : hooks) {
         if (!hook.active) {
             printf("[!] Failed to hook %s\n", hook.name.c_str());
         }

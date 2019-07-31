@@ -32,7 +32,7 @@ static char *homedir() {
     // E.g: "C:/Users/Michael/AppData/Roaming"
     char *home = getenv("APPDATA");
     if (home) {
-        return home;
+        return strdup(home);
     } else {
         return NULL;
     }
