@@ -61,7 +61,7 @@ std::string Draconity::set_dragon_enabled(bool enabled) {
 int Grammar::disable(std::string *errmsg) {
     int rc = 0;
     std::stringstream errstream;
-    if ((rc =_DSXGrammar_Deactivate(this->handle, 0, this->main_rule))) {
+    if ((rc =_DSXGrammar_Deactivate(this->handle, 0, this->main_rule.c_str()))) {
         errstream << "error deactivating grammar: " << rc;
         *errmsg = errstream.str();
         return rc;

@@ -18,20 +18,28 @@ typedef struct {
 
 class Grammar {
     public:
-        Grammar(const char *name, const char *main_rule) {
+        Grammar(std::string name, std::string main_rule) {
+            this->key = 0;
             this->name = name;
             this->main_rule = main_rule;
+            this->handle = nullptr;
+            this->enabled = false;
+            this->exclusive = false;
+            this->priority = 0;
+            this->endkey = 0;
+            this->beginkey = 0;
+            this->hypokey = 0;
         };
 
         int disable(std::string *errmsg);
 
         uintptr_t key;
-        const char *name, *main_rule;
+        std::string name, main_rule;
         drg_grammar *handle;
 
         bool enabled, exclusive;
         int priority;
-        const char *appname;
+        std::string appname;
         unsigned int endkey, beginkey, hypokey;
     private:
 };

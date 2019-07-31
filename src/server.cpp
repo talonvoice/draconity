@@ -55,14 +55,6 @@ static bson_t *success_msg() {
     return BCON_NEW("success", BCON_BOOL(true));
 }
 
-static void grammar_free(Grammar *g) {
-    free((void *)g->main_rule);
-    free((void *)g->name);
-    free((void *)g->appname);
-    memset(g, 0, sizeof(Grammar));
-    free(g);
-}
-
 static int grammar_unload(Grammar *g) {
     std::string errmsg;
     int rc = 0;
@@ -86,7 +78,7 @@ static int grammar_unload(Grammar *g) {
     reuse->serial = draconity->serial;
     draconity->gkfree.push_back(reuse);
 
-    grammar_free(g);
+    delete g;
     draconity->keylock.unlock();
     return rc;
 }
@@ -267,7 +259,7 @@ static bson_t *handle_message(const uint8_t *msg, uint32_t msglen) {
             if (has_enabled && enabled != grammar->enabled) {
                 if (enabled) {
                     int rc = 0;
-                    if ((rc = _DSXGrammar_Activate(grammar->handle, 0, false, grammar->main_rule))) {
+                    if ((rc = _DSXGrammar_Activate(grammar->handle, 0, false, grammar->main_rule.c_str()))) {
                         errstream << "error activating grammar: " << rc;
                         errmsg = errstream.str();
                         goto end;
@@ -457,7 +449,7 @@ static bson_t *handle_message(const uint8_t *msg, uint32_t msglen) {
             Grammar *grammar = pair.second;
             bson_uint32_to_string(i, &key, keystr, sizeof(keystr));
             BSON_APPEND_DOCUMENT_BEGIN(&grammars, key, &child);
-            BSON_APPEND_UTF8(&child, "name", grammar->name);
+            BSON_APPEND_UTF8(&child, "name", grammar->name.c_str());
             BSON_APPEND_BOOL(&child, "enabled", grammar->enabled);
             BSON_APPEND_INT32(&child, "priority", grammar->priority);
             BSON_APPEND_BOOL(&child, "exclusive", grammar->exclusive);
