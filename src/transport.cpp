@@ -115,7 +115,6 @@ class UvServer {
     UvServer(transport_msg_fn callback);
     ~UvServer();
     void listen(const char *host, int port);
-    void startBroadcasting();
     void run();
 
     void publish(uint8_t *msg, size_t length);
@@ -198,20 +197,6 @@ void UvServer::listen(const char *host, int port) {
     tcp->listen();
 }
 
-void UvServer::startBroadcasting() {
-    std::shared_ptr<uvw::TimerHandle> timer = loop->resource<uvw::TimerHandle>();
-
-    timer->on<uvw::TimerEvent>([this](const uvw::TimerEvent &event, uvw::TimerHandle &timer) {
-        uint64_t time_now = std::chrono::milliseconds(loop->now()).count();
-        bson_t *b = BCON_NEW("cmd", BCON_UTF8("time"), "time", BCON_INT64(time_now));
-        uint32_t length;
-        uint8_t *msg = bson_destroy_with_steal(b, true, &length);
-        publish(msg, length);
-    });
-
-    timer->start(std::chrono::milliseconds(BROADCAST_DELAY_MS), std::chrono::milliseconds(BROADCAST_DELAY_MS));
-}
-
 void UvServer::run() {
     loop->run();
 }
@@ -260,7 +245,6 @@ void draconity_transport_main(transport_msg_fn callback) {
         started_server_lock.lock();
         UvServer server(callback);
         server.listen(addr, port);
-        server.startBroadcasting();
         started_server = &server;
         started_server_lock.unlock();
 
