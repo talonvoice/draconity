@@ -264,8 +264,7 @@ void draconity_transport_main(transport_msg_fn callback) {
     networkThread.detach();
 }
 
-//TODO actually we don't care about this topic anymore - remove it
-void draconity_transport_publish(const char *topic, uint8_t *data, uint32_t size) {
+void draconity_transport_publish(uint8_t *data, uint32_t size) {
     started_server_lock.lock();
     if (started_server) {
         started_server->publish(data, size);

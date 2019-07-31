@@ -7,7 +7,7 @@ void draconity_install();
 static Draconity *instance = NULL;
 Draconity *Draconity::shared() {
     if (!instance) {
-        instance = new Draconity;
+        instance = new Draconity();
         draconity_install();
     }
     return instance;

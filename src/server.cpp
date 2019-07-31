@@ -32,9 +32,10 @@
 
 void draconity_publish(const char *topic, bson_t *obj) {
     BSON_APPEND_INT64(obj, "ts", bson_get_monotonic_time());
+    BSON_APPEND_UTF8(obj, "topic", topic);
     uint32_t length = 0;
     uint8_t *buf = bson_destroy_with_steal(obj, true, &length);
-    draconity_transport_publish(topic, buf, length);
+    draconity_transport_publish(buf, length);
 }
 
 void draconity_logf(const char *fmt, ...) {
