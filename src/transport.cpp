@@ -24,6 +24,10 @@ class UvClient {
         this->handle_message_callback = callback;
     }
 
+    void onError(const uvw::ErrorEvent &, uvw::TCPHandle &client) {
+        client.close();
+    }
+
     void onEnd(const uvw::EndEvent &, uvw::TCPHandle &client) {
         client.close();
     }
@@ -170,6 +174,7 @@ void UvServer::listen(const char *host, int port) {
             uvw::Addr peer = tcpClient.peer();
             printf("[+] Draconity transport: encountered network error with connection to peer %s:%u; details: code=%i name=%s\n",
                    peer.ip.c_str(), peer.port, event.code(), event.name());
+            client->onError(event, tcpClient);
         });
         tcpClient->on<uvw::EndEvent>([client](const uvw::EndEvent &event, uvw::TCPHandle &tcpClient) {
             client->onEnd(event, tcpClient);
