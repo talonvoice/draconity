@@ -86,29 +86,16 @@ int Grammar::disable(std::string *errmsg) {
 }
 
 bool ForeignGrammar::matches(drg_grammar *other_grammar, const char *other_main_rule) {
-    /* Does this grammar match another?
-
-       Both the other grammar and its main rule must be provided for the
-       comparison. */
-
-    return (this->grammar == other_grammar
-            && this->main_rule_matches(other_main_rule));
+    std::string other_rule = other_main_rule ? other_main_rule : "";
+    return (this->grammar == other_grammar && this->main_rule == other_rule);
 }
 
 int ForeignGrammar::activate() {
-    return _DSXGrammar_Activate(this->grammar, this->unk1, this->unk2, this->main_rule);
+    const char *main_rule = (this->main_rule.size() > 0) ? this->main_rule.c_str() : NULL;
+    return _DSXGrammar_Activate(this->grammar, this->unk1, this->unk2, main_rule);
 };
 
 int ForeignGrammar::deactivate() {
-    return _DSXGrammar_Deactivate(this->grammar, this->unk1, this->main_rule);
-}
-
-bool ForeignGrammar::main_rule_matches(const char *other_main_rule) {
-    /* Does this grammar's main_rule match another? */
-
-    // Main rules match if they're both NULL, or if they're matching
-    // C-strings.
-    return ((this->main_rule == NULL && other_main_rule == NULL)
-            || (this->main_rule && other_main_rule
-                && strcmp(this->main_rule, other_main_rule) == 0));
+    const char *main_rule = (this->main_rule.size() > 0) ? this->main_rule.c_str() : NULL;
+    return _DSXGrammar_Deactivate(this->grammar, this->unk1, main_rule);
 }

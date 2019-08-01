@@ -51,9 +51,7 @@ class ForeignGrammar {
             this->unk1 = unk1;
             this->unk2 = unk2;
             if (main_rule) {
-                this->main_rule = strdup(main_rule);
-            } else {
-                this->main_rule = NULL;
+                this->main_rule = main_rule;
             }
         };
 
@@ -62,11 +60,10 @@ class ForeignGrammar {
         int deactivate();
 
     private:
-        bool main_rule_matches(const char* other_main_rule);
         drg_grammar *grammar;
         uint64_t unk1;
         bool unk2;
-        const char *main_rule;
+        std::string main_rule;
 };
 
 class Draconity {
