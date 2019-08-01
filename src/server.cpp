@@ -13,13 +13,6 @@
 #include "server.h"
 #include "draconity.h"
 
-#if defined(__MINGW32__) || defined(__MINGW64__)
-// On MSYS2 mingw, we have to include libiberty explicitly for vasprintf.
-#ifndef vasprintf
-#include "libiberty/libiberty.h"
-#endif // def vasprintf
-#endif // defined(__MINGW32__) || defined(__MINGW64__)
-
 #define align4(len) ((len + 4) & ~3)
 
 #ifndef streq
@@ -42,13 +35,18 @@ void draconity_logf(const char *fmt, ...) {
     char *str = NULL;
     va_list va;
     va_start(va, fmt);
-    vasprintf(&str, fmt, va);
+    int needed = vsnprintf(NULL, 0, fmt, va);
+    va_end(va);
+
+    va_start(va, fmt);
+    str = new char[needed + 1];
+    vsnprintf(str, needed + 1, fmt, va);
     va_end(va);
 
     bson_t obj = BSON_INITIALIZER;
     BSON_APPEND_UTF8(&obj, "msg", str);
     draconity_publish("log", &obj);
-    free(str);
+    delete str;
 }
 
 static bson_t *success_msg() {
