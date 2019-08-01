@@ -146,19 +146,21 @@ static int DSXFileSystem_PreferenceSetValue(drg_filesystem *fs, char *a, char *b
 }
 
 // track which dragon grammars are active, so "dragon" pseudogrammar can activate them
-int DSXGrammar_Activate(drg_grammar *grammar, uint64_t unk1, bool unk2, const char *main_rule) {
+int (*orig_DSXGrammar_Activate)(drg_grammar *grammar, uintptr_t unk1, uintptr_t unk2, const char *main_rule);
+int DSXGrammar_Activate(drg_grammar *grammar, uintptr_t unk1, uintptr_t unk2, const char *main_rule) {
     draconity->dragon_lock.lock();
     ForeignGrammar *foreign_grammar = new ForeignGrammar(grammar, unk1, unk2, main_rule);
     draconity->dragon_grammars.push_back(foreign_grammar);
     int ret = 0;
     if (draconity->dragon_enabled) {
-        ret = _DSXGrammar_Activate(grammar, unk1, unk2, main_rule);
+        ret = orig_DSXGrammar_Activate(grammar, unk1, unk2, main_rule);
     }
     draconity->dragon_lock.unlock();
     return ret;
 }
 
-int DSXGrammar_Deactivate(drg_grammar *grammar, uint64_t unk1, const char *main_rule) {
+int (*orig_DSXGrammar_Deactivate)(drg_grammar *grammar, uintptr_t unk1, const char *main_rule);
+int DSXGrammar_Deactivate(drg_grammar *grammar, uintptr_t unk1, const char *main_rule) {
     draconity->dragon_lock.lock();
     // Remove the grammar from the draconity's internal map (if it exists).
     ForeignGrammar *grammar_to_remove = NULL;
@@ -179,17 +181,18 @@ int DSXGrammar_Deactivate(drg_grammar *grammar, uint64_t unk1, const char *main_
     // disabled.
     int ret = 0;
     if (draconity->dragon_enabled) {
-        ret = _DSXGrammar_Deactivate(grammar, unk1, main_rule);
+        ret = orig_DSXGrammar_Deactivate(grammar, unk1, main_rule);
     }
     draconity->dragon_lock.unlock();
     return ret;
 }
 
+int (*orig_DSXGrammar_SetList)(drg_grammar *grammar, const char *name, dsx_dataptr *data);
 int DSXGrammar_SetList(drg_grammar *grammar, const char *name, dsx_dataptr *data) {
     draconity->dragon_lock.lock();
     int ret = 0;
     if (draconity->dragon_enabled) {
-        ret = _DSXGrammar_SetList(grammar, name, data);
+        ret = orig_DSXGrammar_SetList(grammar, name, data);
     }
     draconity->dragon_lock.unlock();
     return ret;
@@ -225,8 +228,8 @@ static drg_engine *DSXEngine_New() {
     return _engine;
 }
 
-int (*orig_DSXEngine_Create)(char *s, uint64_t val, drg_engine **engine);
-static int DSXEngine_Create(char *s, uint64_t val, drg_engine **engine) {
+int (*orig_DSXEngine_Create)(char *s, uintptr_t val, drg_engine **engine);
+static int DSXEngine_Create(char *s, uintptr_t val, drg_engine **engine) {
     int ret = orig_DSXEngine_Create(s, val, engine);
     draconity_logf("DSXEngine_Create(%s, %llu, &%p) = %d", s, val, engine, ret);
     engine_acquire(*engine, true);

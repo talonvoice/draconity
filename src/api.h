@@ -5,7 +5,7 @@
 // dragon 5
 DLAPI drg_engine *(*_DSXEngine_New)();
 // dragon 6
-DLAPI int (*_DSXEngine_Create)(char *s, uint64_t val, drg_engine **engine);
+DLAPI int (*_DSXEngine_Create)(char *s, uintptr_t val, drg_engine **engine);
 
 DLAPI int (*_DSXEngine_AddWord)(drg_engine *engine, const char *word, int flags, drg_wordinfo **info);
 DLAPI int (*_DSXEngine_AddTemporaryWord)(drg_engine *engine, const char *word, int flags);
@@ -34,7 +34,7 @@ DLAPI int (*_DSXEngine_SetBeginPhraseCallback)(drg_engine *engine, int (*cb)(voi
 DLAPI int (*_DSXEngine_SetEndPhraseCallback)(drg_engine *engine, void *cb, void *user, unsigned int *key);
 
 DLAPI int (*_DSXEngine_Pause)(drg_engine *engine);
-DLAPI int (*_DSXEngine_Resume)(drg_engine *engine, uint64_t token);
+DLAPI int (*_DSXEngine_Resume)(drg_engine *engine, uintptr_t token);
 DLAPI int (*_DSXEngine_ResumeRecognition)(drg_engine *engine);
 
 DLAPI int (*_DSXFileSystem_PreferenceSetValue)(drg_filesystem *fs, char *a, char *b, char *c, char *d);
@@ -44,8 +44,8 @@ DLAPI int (*_DSXFileSystem_SetUsersDirectory)(drg_filesystem *fs, char *a, bool 
 DLAPI int (*_DSXFileSystem_SetVocabsLocation)(drg_filesystem *fs, char *a, bool unk);
 DLAPI int (*_DSXFileSystem_SetResultsDirectory)(drg_filesystem *fs, char *a, bool unk);
 
-DLAPI int (*_DSXGrammar_Activate)(drg_grammar *grammar, uint64_t unk1, bool unk2, const char *main_rule);
-DLAPI int (*_DSXGrammar_Deactivate)(drg_grammar *grammar, uint64_t unk1, const char *main_rule);
+DLAPI int (*_DSXGrammar_Activate)(drg_grammar *grammar, uintptr_t unk1, bool unk2, const char *main_rule);
+DLAPI int (*_DSXGrammar_Deactivate)(drg_grammar *grammar, uintptr_t unk1, const char *main_rule);
 DLAPI int (*_DSXGrammar_Destroy)(drg_grammar *);
 DLAPI int (*_DSXGrammar_GetList)(drg_grammar *grammar, const char *name, dsx_dataptr *data);
 DLAPI int (*_DSXGrammar_RegisterBeginPhraseCallback)(drg_grammar *grammar, int (*cb)(void *, void *), void *user, unsigned int *key);
