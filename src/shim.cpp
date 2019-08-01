@@ -27,14 +27,14 @@ int draconity_set_param(const char *key, const char *value) {
 }
 
 #if defined(_WIN32) || defined(__MINGW32__) || defined(__MINGW64__)
-static char *homedir() {
+std::string homedir() {
     // This should return "<userdir>/AppData/Roaming" on Windows 7+.
     // E.g: "C:/Users/Michael/AppData/Roaming"
     char *home = getenv("APPDATA");
     if (home) {
-        return strdup(home);
+        return std::string(home);
     } else {
-        return NULL;
+        return "";
     }
 }
 #elif defined(__APPLE__)
@@ -49,9 +49,9 @@ static char *homedir() {
         struct passwd pw, *pwp;
         char buf[1024];
         if (getpwuid_r(getuid(), &pw, buf, sizeof(buf), &pwp) == 0) {
-            return strdup(pwp->pw_dir);
+            return std::string(pwp->pw_dir);
         }
-        return NULL;
+        return "";
     }
 }
 #else
@@ -59,23 +59,19 @@ static char *homedir() {
 #endif // defined(_WIN32) || defined(__MINGW32__) || defined(__MINGW64__)
 
 typedef struct {
-    char *timeout;
-    char *timeout_incomplete;
+    std::string timeout;
+    std::string timeout_incomplete;
 } config;
 
 static bool prevent_wake = false;
 
 void draconity_set_default_params() {
     config config = {
-        .timeout = strdup("80"),
-        .timeout_incomplete = strdup("500"),
+        .timeout = "80",
+        .timeout_incomplete = "500",
     };
-
-    draconity_set_param("DwTimeOutComplete", config.timeout);
-    draconity_set_param("DwTimeOutIncomplete", config.timeout_incomplete);
-    free(config.timeout);
-    free(config.timeout_incomplete);
-    memset(&config, 0, sizeof(config));
+    draconity_set_param("DwTimeOutComplete", config.timeout.c_str());
+    draconity_set_param("DwTimeOutIncomplete", config.timeout_incomplete.c_str());
 
     draconity_set_param("DemonThreadPhraseFinishWait", "0");
     // draconity_set_param("TwoPassSkipSecondPass", "1");
