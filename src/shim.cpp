@@ -320,9 +320,10 @@ static std::list<SymbolLoad> server_syms {
 void draconity_install() {
 #ifdef DEBUG
     std::string logfile = homedir() + "/draconity.log";
-    int log = open(logfile.c_str(), O_CREAT | O_WRONLY | O_APPEND, 0644);
-    dup2(log, 1);
-    dup2(log, 2);
+    freopen(logfile.c_str(), "a", stdout);
+    freopen(logfile.c_str(), "a", stderr);
+    setvbuf(stdout, NULL, _IONBF, 0);
+    setvbuf(stderr, NULL, _IONBF, 0);
 #endif
     printf("[+] draconity starting\n");
     int hooked = 0;
