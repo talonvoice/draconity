@@ -34,5 +34,5 @@ cmake . -DZYDIS_BUILD_EXAMPLES=NO -DZYDIS_BUILD_TOOLS=NO
 make -j4 && make install
 
 cd "$base"
-cmake .
+cmake . -DCMAKE_INSTALL_PREFIX="$DESTDIR"
 make -j4

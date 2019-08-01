@@ -42,13 +42,13 @@ include_directories(${BSON_INCLUDE} ${ZYDIS_INCLUDE} vendor/uvw/src)
 
 file(GLOB_RECURSE SOURCE src/*.c src/*.cpp)
 add_library(draconity SHARED ${SOURCE})
-target_link_libraries(draconity m pthread ${UV} ${ZYDIS} ${BSON})
+target_link_libraries(draconity m ${UV} ${ZYDIS} ${BSON})
 if(APPLE)
     include_directories(/usr/local/include)
     target_link_libraries(draconity -F/System/Library/PrivateFrameworks "-framework CoreSymbolication -framework AppKit")
 endif()
 if(MINGW)
-    target_link_libraries(draconity ws2_32 psapi iphlpapi userenv)
+    target_link_libraries(draconity ws2_32 psapi iphlpapi userenv -static-libgcc -static-libstdc++ "-Wl,-Bstatic -lpthread -Wl,-Bdynamic")
 endif()
 
 set_target_properties(draconity PROPERTIES
