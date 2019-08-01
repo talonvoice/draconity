@@ -42,7 +42,7 @@ include_directories(${BSON_INCLUDE} ${ZYDIS_INCLUDE} vendor/uvw/src)
 
 file(GLOB_RECURSE SOURCE src/*.c src/*.cpp)
 add_library(draconity SHARED ${SOURCE})
-target_link_libraries(draconity m dl pthread ${UV} ${ZYDIS} ${BSON})
+target_link_libraries(draconity m pthread ${UV} ${ZYDIS} ${BSON})
 if(APPLE)
     include_directories(/usr/local/include)
     target_link_libraries(draconity -F/System/Library/PrivateFrameworks "-framework CoreSymbolication -framework AppKit")
