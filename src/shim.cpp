@@ -316,7 +316,8 @@ static std::list<SymbolLoad> server_syms {
 
 void draconity_install() {
 #ifdef DEBUG
-    int log = open("/tmp/draconity.log", O_CREAT | O_WRONLY | O_APPEND, 0644);
+    std::string logfile = homedir() + "/draconity.log";
+    int log = open(logfile.c_str(), O_CREAT | O_WRONLY | O_APPEND, 0644);
     dup2(log, 1);
     dup2(log, 2);
 #endif
