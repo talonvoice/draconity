@@ -11,7 +11,6 @@ set(CMAKE_SKIP_BUILD_RPATH TRUE)
 set(CMAKE_BUILD_WITH_INSTALL_RPATH FALSE)
 
 link_directories(${CMAKE_LIBRARY_OUTPUT_DIRECTORY})
-include_directories(/usr/include/libbson-1.0 /usr/local/include/libbson-1.0)
 
 include_directories(src)
 if (ASAN)
@@ -24,26 +23,22 @@ else()
     add_definitions(-O2)
 endif()
 
+find_path(BSON_INCLUDE libbson-1.0/bson.h)
+set(BSON_INCLUDE ${BSON_INCLUDE}/libbson-1.0)
 find_library(BSON NAMES libbson-static-1.0.a)
-if (NOT BSON)
-    # Got an error here and are on linux? the apt package doesn't have a static
-    # lib for libbson, so need to build it yourself and then point cmake at it.
-    # Do an in-source build for libbson using the ccmake UI to turn on static build.
-    # You also need to add -fPIC to cmake's CFLAGS.
-    # Then invoke cmake for Draconity like:
-    # env CMAKE_LIBRARY_PATH=/home/caspar/src/libbson-1.9.2 cmake .
-    # Probably there's a better way but hey this works for now :)
+if (NOT BSON OR NOT BSON_INCLUDE)
     message(FATAL_ERROR "libbson not found")
 endif()
+find_path(ZYDIS_INCLUDE Zydis/Zydis.h)
 find_library(ZYDIS NAMES libzydis.a zydis Zydis)
-if (NOT ZYDIS)
+if (NOT ZYDIS OR NOT ZYDIS_INCLUDE)
     message(FATAL_ERROR "libzydis not found")
 endif()
 find_library(UV NAMES uv)
 if (NOT UV)
     message(FATAL_ERROR, "libuv not found")
 endif()
-include_directories(vendor/uvw/src)
+include_directories(${BSON_INCLUDE} ${ZYDIS_INCLUDE} vendor/uvw/src)
 
 file(GLOB_RECURSE SOURCE src/*.c src/*.cpp)
 add_library(draconity SHARED ${SOURCE})
