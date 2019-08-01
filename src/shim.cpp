@@ -41,7 +41,7 @@ std::string homedir() {
 #include <sys/types.h>
 #include <pwd.h>
 
-static char *homedir() {
+std::string homedir() {
     char *home = getenv("HOME");
     if (home) {
         return strdup(home);
