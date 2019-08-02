@@ -120,7 +120,7 @@ class UvServer {
     std::list<std::function<void()>> invoke_queue;
     std::shared_ptr<uvw::Loop> loop;
     std::shared_ptr<uvw::AsyncHandle> async_invoke_handle;
-    std::mutex lock; // protects access to both `clients` and `invoke_queue`
+    std::mutex lock; // protects access to `invoke_queue`
 };
 
 UvServer::UvServer(transport_msg_fn callback) {
@@ -128,10 +128,10 @@ UvServer::UvServer(transport_msg_fn callback) {
     loop = uvw::Loop::create();
 
     async_invoke_handle = loop->resource<uvw::AsyncHandle>();
-    async_invoke_handle->on<uvw::AsyncEvent>([this](const auto &, auto &) {
+    async_invoke_handle->on<uvw::AsyncEvent>([this](auto &, auto &) {
         this->drain_invoke_queue();
     });
-    async_invoke_handle->on<uvw::ErrorEvent>([](const auto &, auto &) {
+    async_invoke_handle->on<uvw::ErrorEvent>([](auto &, auto &) {
         printf("[!] Draconity transport: received error event for checking invoke queue!");
     });
 }
@@ -155,9 +155,7 @@ void UvServer::listen(const char *host, int port) {
         tcpClient->on<uvw::CloseEvent>([this, client](const uvw::CloseEvent &, uvw::TCPHandle &tcpClient) {
             uvw::Addr peer = tcpClient.peer();
             printf("[+] Draconity transport: closing connection to peer %s:%u\n", peer.ip.c_str(), peer.port);
-            lock.lock();
             clients.remove(client);
-            lock.unlock();
         });
         tcpClient->on<uvw::ErrorEvent>([client](const uvw::ErrorEvent &event, uvw::TCPHandle &tcpClient) {
             uvw::Addr peer = tcpClient.peer();
@@ -172,9 +170,7 @@ void UvServer::listen(const char *host, int port) {
             client->onData(event, tcpClient);
         });
 
-        lock.lock();
         clients.push_back(client);
-        lock.unlock();
 
         srv.accept(*tcpClient);
         tcpClient->read();
