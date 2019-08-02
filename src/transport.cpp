@@ -132,7 +132,7 @@ UvServer::UvServer(transport_msg_fn callback) {
         this->drain_invoke_queue();
     });
     async_invoke_handle->on<uvw::ErrorEvent>([](auto &, auto &) {
-        printf("[!] Draconity transport: received error event for checking invoke queue!");
+        printf("[!] draconity transport: received error event for checking invoke queue!");
     });
 }
 
@@ -149,17 +149,17 @@ void UvServer::listen(const char *host, int port) {
     tcp->on<uvw::ListenEvent>([this](const uvw::ListenEvent &, uvw::TCPHandle &srv) {
         std::shared_ptr<uvw::TCPHandle> tcpClient = srv.loop().resource<uvw::TCPHandle>();
         uvw::Addr peer = tcpClient->peer();
-        printf("[+] Draconity transport: accepted connection on socket %s:%u\n", peer.ip.c_str(), peer.port);
+        printf("[+] draconity transport: accepted connection on socket %s:%u\n", peer.ip.c_str(), peer.port);
 
         auto client = std::make_shared<UvClient>(tcpClient, handle_message_callback);
         tcpClient->on<uvw::CloseEvent>([this, client](const uvw::CloseEvent &, uvw::TCPHandle &tcpClient) {
             uvw::Addr peer = tcpClient.peer();
-            printf("[+] Draconity transport: closing connection to peer %s:%u\n", peer.ip.c_str(), peer.port);
+            printf("[+] draconity transport: closing connection to peer %s:%u\n", peer.ip.c_str(), peer.port);
             clients.remove(client);
         });
         tcpClient->on<uvw::ErrorEvent>([client](const uvw::ErrorEvent &event, uvw::TCPHandle &tcpClient) {
             uvw::Addr peer = tcpClient.peer();
-            printf("[+] Draconity transport: encountered network error with connection to peer %s:%u; details: code=%i name=%s\n",
+            printf("[+] draconity transport: encountered network error with connection to peer %s:%u; details: code=%i name=%s\n",
                    peer.ip.c_str(), peer.port, event.code(), event.name());
             client->onDisconnect(event, tcpClient);
         });
@@ -222,7 +222,7 @@ void draconity_transport_main(transport_msg_fn callback) {
     std::thread networkThread([&condvar, callback] {
         auto port = 8000;
         auto addr = "127.0.0.1";
-        printf("[+] Draconity transport: TCP server starting on %s:%i\n", addr, port);
+        printf("[+] draconity transport: TCP server starting on %s:%i\n", addr, port);
 
         server = new UvServer(callback);
         server->listen(addr, port);
