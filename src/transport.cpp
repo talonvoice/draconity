@@ -6,6 +6,7 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <sstream>
 #include <thread>
 #include <uvw.hpp>
 
@@ -112,7 +113,8 @@ class UvServer {
   public:
     UvServer(transport_msg_fn callback);
     ~UvServer();
-    void listen(const char *host, int port);
+    void listenTCP(std::string host, int port);
+    void listenPipe(std::string path);
     void run();
 
     void publish(std::vector<uint8_t> msg);
@@ -149,40 +151,85 @@ UvServer::~UvServer() {
     loop->close();
 }
 
-void UvServer::listen(const char *host, int port) {
-    std::shared_ptr<uvw::TCPHandle> tcp = loop->resource<uvw::TCPHandle>();
+static std::string peername(uvw::Addr peer) {
+    std::ostringstream stream;
+    stream << peer.ip << ":" << peer.port;
+    return stream.str();
+}
 
-    tcp->on<uvw::ListenEvent>([this](const uvw::ListenEvent &, uvw::TCPHandle &srv) {
-        std::shared_ptr<uvw::TCPHandle> tcpClient = srv.loop().resource<uvw::TCPHandle>();
-        uvw::Addr peer = tcpClient->peer();
-        printf("[+] draconity transport: accepted connection on socket %s:%u\n", peer.ip.c_str(), peer.port);
+static std::string peername(std::string peer) {
+    return peer;
+}
 
-        auto client = std::make_shared<UvClient<uvw::TCPHandle>>(tcpClient, handle_message_callback);
+void UvServer::listenTCP(std::string host, int port) {
+    auto resource = loop->resource<uvw::TCPHandle>();
+    resource->on<uvw::ListenEvent>([this](const uvw::ListenEvent &, uvw::TCPHandle &srv) {
+        auto stream = srv.loop().resource<uvw::TCPHandle>();
+        printf("[+] draconity transport: accepted TCP connection from peer %s\n", peername(stream->peer()).c_str());
+
+        auto client = std::make_shared<UvClient<uvw::TCPHandle>>(stream, handle_message_callback);
         auto baseClient = std::static_pointer_cast<UvClientBase>(client);
-        tcpClient->once<uvw::CloseEvent>([this, baseClient](const uvw::CloseEvent &, uvw::TCPHandle &tcpClient) {
-            uvw::Addr peer = tcpClient.peer();
-            printf("[+] draconity transport: closing connection to peer %s:%u\n", peer.ip.c_str(), peer.port);
+        stream->once<uvw::CloseEvent>([this, baseClient](auto &, auto &stream) {
+            printf("[+] draconity transport: closing TCP connection to peer %s\n", peername(stream.peer()).c_str());
             clients.remove(baseClient);
         });
-        tcpClient->once<uvw::ErrorEvent>([client](const uvw::ErrorEvent &event, uvw::TCPHandle &tcpClient) {
-            uvw::Addr peer = tcpClient.peer();
-            printf("[+] draconity transport: encountered network error with connection to peer %s:%u; details: code=%i name=%s\n",
-                   peer.ip.c_str(), peer.port, event.code(), event.name());
-            client->onDisconnect(event, tcpClient);
+        stream->once<uvw::ErrorEvent>([client](auto &event, auto &stream) {
+            printf("[+] draconity transport: TCP error for peer %s: [%d] %s\n",
+                   peername(stream.peer()).c_str(), event.code(), event.name());
+            client->onDisconnect(event, stream);
         });
-        tcpClient->once<uvw::EndEvent>([client](const uvw::EndEvent &event, uvw::TCPHandle &tcpClient) {
-            client->onDisconnect(event, tcpClient);
+        stream->once<uvw::EndEvent>([client](auto &event, auto &stream) {
+            client->onDisconnect(event, stream);
         });
-        tcpClient->on<uvw::DataEvent>([client](const uvw::DataEvent &event, uvw::TCPHandle &tcpClient) {
-            client->onData(event, tcpClient);
+        stream->on<uvw::DataEvent>([client](auto &event, auto &stream) {
+            client->onData(event, stream);
         });
 
         clients.push_back(baseClient);
-        srv.accept(*tcpClient);
-        tcpClient->read();
+        srv.accept(*stream);
+        stream->read();
     });
-    tcp->bind(host, port);
-    tcp->listen();
+    resource->on<uvw::ErrorEvent>([](auto &event, auto &resource) {
+        printf("[+] draconity TCP transport error[%d]: %s\n", event.code(), event.name());
+    });
+    resource->bind(host, port);
+    resource->listen();
+}
+
+void UvServer::listenPipe(std::string path) {
+    // mostly duplicated from listenTCP
+    auto resource = loop->resource<uvw::PipeHandle>();
+    resource->on<uvw::ListenEvent>([this](const uvw::ListenEvent &, uvw::PipeHandle &srv) {
+        auto stream = srv.loop().resource<uvw::PipeHandle>();
+        printf("[+] draconity transport: accepted pipe connection from peer %s\n", peername(stream->peer()).c_str());
+
+        auto client = std::make_shared<UvClient<uvw::PipeHandle>>(stream, handle_message_callback);
+        auto baseClient = std::static_pointer_cast<UvClientBase>(client);
+        stream->once<uvw::CloseEvent>([this, baseClient](auto &, auto &stream) {
+            printf("[+] draconity transport: closing pipe connection to peer %s\n", peername(stream.peer()).c_str());
+            clients.remove(baseClient);
+        });
+        stream->once<uvw::ErrorEvent>([client](auto &event, auto &stream) {
+            printf("[+] draconity transport: pipe error for peer %s: [%d] %s\n",
+                   peername(stream.peer()).c_str(), event.code(), event.name());
+            client->onDisconnect(event, stream);
+        });
+        stream->once<uvw::EndEvent>([client](auto &event, auto &stream) {
+            client->onDisconnect(event, stream);
+        });
+        stream->on<uvw::DataEvent>([client](auto &event, auto &stream) {
+            client->onData(event, stream);
+        });
+
+        clients.push_back(baseClient);
+        srv.accept(*stream);
+        stream->read();
+    });
+    resource->on<uvw::ErrorEvent>([](auto &event, auto &resource) {
+        printf("[+] draconity pipe transport error[%d]: %s\n", event.code(), event.name());
+    });
+    resource->bind(path);
+    resource->listen();
 }
 
 void UvServer::run() {
@@ -226,12 +273,25 @@ void draconity_transport_main(transport_msg_fn callback) {
     std::unique_lock<std::mutex> ulock(lock);
 
     std::thread networkThread([&condvar, callback] {
-        auto port = 8000;
-        auto addr = "127.0.0.1";
-        printf("[+] draconity transport: TCP server starting on %s:%i\n", addr, port);
+        // TODO: configurable host/port/pipe
+        std::string pipe;
+        std::string addr;
+        int port = 0;
+        addr = "127.0.0.1";
+        port = 38065;
 
         server = new UvServer(callback);
-        server->listen(addr, port);
+        if (addr != "") {
+            printf("[+] draconity transport: binding TCP at %s:%i\n", addr.c_str(), port);
+            server->listenTCP(addr, port);
+        }
+        if (pipe != "") {
+            printf("[+] draconity transport: binding pipe at %s\n", pipe.c_str());
+            // TODO: make parent directories?
+            // TODO: only pretend it's a file if we're on mac?
+            unlink(pipe.c_str());
+            server->listenPipe(pipe);
+        }
         condvar.notify_one();
         server->run();
     });
