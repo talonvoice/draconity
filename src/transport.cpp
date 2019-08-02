@@ -19,19 +19,25 @@ typedef struct __attribute__((packed)) {
 
 #define BROADCAST_DELAY_MS 1000
 
-class UvClient {
+class UvClientBase {
+public:
+    virtual void publish(const std::vector<uint8_t> &msg) {}
+};
+
+template <typename T>
+class UvClient : public UvClientBase {
   public:
-    UvClient(std::shared_ptr<uvw::TCPHandle> tcp, transport_msg_fn callback) {
-        this->tcp = tcp;
+    UvClient(std::shared_ptr<T> stream, transport_msg_fn callback) {
+        this->stream = stream;
         this->handle_message_callback = callback;
     }
 
-    template <typename T>
-    void onDisconnect(const T &, uvw::TCPHandle &client) {
-        client.close();
+    template <typename E>
+    void onDisconnect(const E &event, T &stream) {
+        stream.close();
     }
 
-    void onData(const uvw::DataEvent &event, uvw::TCPHandle &client) {
+    void onData(const uvw::DataEvent &event, T &stream) {
         auto data = &event.data[0];
         recv_buffer.insert(recv_buffer.end(), data, data + event.length);
 
@@ -66,13 +72,13 @@ class UvClient {
 
     // Write `msg` to the client as a published message (i.e. not in
     // response to an incoming message).
-    void publish(const std::vector<uint8_t> &msg) {
+    void publish(const std::vector<uint8_t> &msg) override {
         write_message(PUBLISH_TID, msg);
     }
 
   private:
     transport_msg_fn handle_message_callback;
-    std::shared_ptr<uvw::TCPHandle> tcp;
+    std::shared_ptr<T> stream;
     std::vector<uint8_t> recv_buffer;
 
     std::optional<MessageHeader> received_header = {};
@@ -94,7 +100,7 @@ class UvClient {
         header->tid = ntohl(tid);
         header->length = ntohl(msg_len);
         std::memcpy(&data_to_write.get()[sizeof(MessageHeader)], msg, msg_len);
-        tcp->write(std::move(data_to_write), frame_size);
+        stream->write(std::move(data_to_write), frame_size);
     }
 
     void write_message(const uint32_t tid, const std::vector<uint8_t> &msg) {
@@ -116,7 +122,7 @@ class UvServer {
     void drain_invoke_queue();
 
     transport_msg_fn handle_message_callback;
-    std::list<std::shared_ptr<UvClient>> clients;
+    std::list<std::shared_ptr<UvClientBase>> clients;
     std::list<std::function<void()>> invoke_queue;
     std::shared_ptr<uvw::Loop> loop;
     std::shared_ptr<uvw::AsyncHandle> async_invoke_handle;
@@ -151,27 +157,27 @@ void UvServer::listen(const char *host, int port) {
         uvw::Addr peer = tcpClient->peer();
         printf("[+] draconity transport: accepted connection on socket %s:%u\n", peer.ip.c_str(), peer.port);
 
-        auto client = std::make_shared<UvClient>(tcpClient, handle_message_callback);
-        tcpClient->on<uvw::CloseEvent>([this, client](const uvw::CloseEvent &, uvw::TCPHandle &tcpClient) {
+        auto client = std::make_shared<UvClient<uvw::TCPHandle>>(tcpClient, handle_message_callback);
+        auto baseClient = std::static_pointer_cast<UvClientBase>(client);
+        tcpClient->once<uvw::CloseEvent>([this, baseClient](const uvw::CloseEvent &, uvw::TCPHandle &tcpClient) {
             uvw::Addr peer = tcpClient.peer();
             printf("[+] draconity transport: closing connection to peer %s:%u\n", peer.ip.c_str(), peer.port);
-            clients.remove(client);
+            clients.remove(baseClient);
         });
-        tcpClient->on<uvw::ErrorEvent>([client](const uvw::ErrorEvent &event, uvw::TCPHandle &tcpClient) {
+        tcpClient->once<uvw::ErrorEvent>([client](const uvw::ErrorEvent &event, uvw::TCPHandle &tcpClient) {
             uvw::Addr peer = tcpClient.peer();
             printf("[+] draconity transport: encountered network error with connection to peer %s:%u; details: code=%i name=%s\n",
                    peer.ip.c_str(), peer.port, event.code(), event.name());
             client->onDisconnect(event, tcpClient);
         });
-        tcpClient->on<uvw::EndEvent>([client](const uvw::EndEvent &event, uvw::TCPHandle &tcpClient) {
+        tcpClient->once<uvw::EndEvent>([client](const uvw::EndEvent &event, uvw::TCPHandle &tcpClient) {
             client->onDisconnect(event, tcpClient);
         });
         tcpClient->on<uvw::DataEvent>([client](const uvw::DataEvent &event, uvw::TCPHandle &tcpClient) {
             client->onData(event, tcpClient);
         });
 
-        clients.push_back(client);
-
+        clients.push_back(baseClient);
         srv.accept(*tcpClient);
         tcpClient->read();
     });
