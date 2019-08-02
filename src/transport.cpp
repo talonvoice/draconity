@@ -1,6 +1,7 @@
 #include <bson.h>
 #include <condition_variable>
 #include <cstring>
+#include <functional>
 #include <inttypes.h>
 #include <memory>
 #include <mutex>
@@ -65,7 +66,7 @@ class UvClient {
 
     // Write `msg` to the client as a published message (i.e. not in
     // response to an incoming message).
-    void publish(std::vector<uint8_t> &msg) {
+    void publish(const std::vector<uint8_t> &msg) {
         write_message(PUBLISH_TID, msg);
     }
 
@@ -96,7 +97,7 @@ class UvClient {
         tcp->write(std::move(data_to_write), frame_size);
     }
 
-    void write_message(const uint32_t tid, std::vector<uint8_t> &msg) {
+    void write_message(const uint32_t tid, const std::vector<uint8_t> &msg) {
         write_message(tid, &msg[0], msg.size());
     }
 };
@@ -109,35 +110,36 @@ class UvServer {
     void run();
 
     void publish(std::vector<uint8_t> msg);
+    void invoke(std::function<void()> fn);
 
   private:
-    void drain_publish_queue();
+    void drain_invoke_queue();
 
     transport_msg_fn handle_message_callback;
     std::list<std::shared_ptr<UvClient>> clients;
-    std::list<std::vector<uint8_t>> publish_queue;
+    std::list<std::function<void()>> invoke_queue;
     std::shared_ptr<uvw::Loop> loop;
-    std::shared_ptr<uvw::AsyncHandle> check_publish_queue_handle;
-    std::mutex lock; // protects access to both `clients` and `publish_queue`
+    std::shared_ptr<uvw::AsyncHandle> async_invoke_handle;
+    std::mutex lock; // protects access to both `clients` and `invoke_queue`
 };
 
 UvServer::UvServer(transport_msg_fn callback) {
     handle_message_callback = callback;
     loop = uvw::Loop::create();
 
-    check_publish_queue_handle = loop->resource<uvw::AsyncHandle>();
-    check_publish_queue_handle->on<uvw::AsyncEvent>([this](const auto &, auto &) {
-        this->drain_publish_queue();
+    async_invoke_handle = loop->resource<uvw::AsyncHandle>();
+    async_invoke_handle->on<uvw::AsyncEvent>([this](const auto &, auto &) {
+        this->drain_invoke_queue();
     });
-    check_publish_queue_handle->on<uvw::ErrorEvent>([](const auto &, auto &) {
-        printf("[!] Draconity transport: received error event for checking publish queue!");
+    async_invoke_handle->on<uvw::ErrorEvent>([](const auto &, auto &) {
+        printf("[!] Draconity transport: received error event for checking invoke queue!");
     });
 }
 
 UvServer::~UvServer() {
     loop->stop();
     // async handles can keep libuv loops alive: https://stackoverflow.com/a/13844553/775982
-    check_publish_queue_handle->close();
+    async_invoke_handle->close();
     loop->close();
 }
 
@@ -185,26 +187,32 @@ void UvServer::run() {
     loop->run();
 }
 
-// Publish (TID 0) the `msg` to all connected clients.
-void UvServer::publish(std::vector<uint8_t> msg) {
+void UvServer::invoke(std::function<void()> fn) {
+    // Invoke a function on the event loop's thread.
     // Per http://docs.libuv.org/en/v1.x/design.html , it's not thread-safe to touch a libuv loop
     // outside of the thread running it, so instead we use http://docs.libuv.org/en/v1.x/async.html
-    // in the form of uvw's AsyncHandle wrapper to signal to the event loop that there are messages
-    // which need to be delivered.
+    // in the form of uvw's AsyncHandle wrapper to signal the event loop to call `UvServer::drain_invoke_queue()`
     lock.lock();
-    publish_queue.push_back(std::move(msg));
+    invoke_queue.push_back(fn);
     lock.unlock();
-    check_publish_queue_handle->send();
+    async_invoke_handle->send();
 }
 
-void UvServer::drain_publish_queue() {
-    lock.lock();
-    for (auto m : publish_queue) {
+// Publish (TID 0) the `msg` to all connected clients.
+void UvServer::publish(std::vector<uint8_t> msg) {
+    invoke([this, msg{std::move(msg)}] {
         for (auto const &client : clients) {
-            client->publish(m);
+            client->publish(msg);
         }
+    });
+}
+
+void UvServer::drain_invoke_queue() {
+    lock.lock();
+    for (auto fn : invoke_queue) {
+        fn();
     }
-    publish_queue.clear();
+    invoke_queue.clear();
     lock.unlock();
 }
 
