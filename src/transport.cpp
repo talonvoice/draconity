@@ -25,16 +25,12 @@ class UvClient {
         this->handle_message_callback = callback;
     }
 
-    void onError(const uvw::ErrorEvent &, uvw::TCPHandle &client) {
-        client.close();
-    }
-
-    void onEnd(const uvw::EndEvent &, uvw::TCPHandle &client) {
+    template <typename T>
+    void onDisconnect(const T &, uvw::TCPHandle &client) {
         client.close();
     }
 
     void onData(const uvw::DataEvent &event, uvw::TCPHandle &client) {
-        lock.lock();
         auto data = &event.data[0];
         recv_buffer.insert(recv_buffer.end(), data, data + event.length);
 
@@ -65,11 +61,9 @@ class UvClient {
                 break;
             }
         }
-
-        lock.unlock();
     }
 
-    // Write `msg_len` bytes of `msg` to the client as a published message (i.e. not in
+    // Write `msg` to the client as a published message (i.e. not in
     // response to an incoming message).
     void publish(std::vector<uint8_t> &msg) {
         write_message(PUBLISH_TID, msg);
@@ -79,7 +73,6 @@ class UvClient {
     transport_msg_fn handle_message_callback;
     std::shared_ptr<uvw::TCPHandle> tcp;
     std::vector<uint8_t> recv_buffer;
-    std::mutex lock;
 
     std::optional<MessageHeader> received_header = {};
     // MessageHeader received_header = null;
@@ -133,7 +126,7 @@ UvServer::UvServer(transport_msg_fn callback) {
     loop = uvw::Loop::create();
 
     check_publish_queue_handle = loop->resource<uvw::AsyncHandle>();
-    check_publish_queue_handle->on<uvw::AsyncEvent>([this](const auto &, auto &hndl) {
+    check_publish_queue_handle->on<uvw::AsyncEvent>([this](const auto &, auto &) {
         this->drain_publish_queue();
     });
     check_publish_queue_handle->on<uvw::ErrorEvent>([](const auto &, auto &) {
@@ -143,11 +136,8 @@ UvServer::UvServer(transport_msg_fn callback) {
 
 UvServer::~UvServer() {
     loop->stop();
-
-    // async handles can keep libuv loops alive apparently: https://stackoverflow.com/a/13844553/775982
+    // async handles can keep libuv loops alive: https://stackoverflow.com/a/13844553/775982
     check_publish_queue_handle->close();
-
-    // TODO: figure out if we actually need to call this close
     loop->close();
 }
 
@@ -171,16 +161,13 @@ void UvServer::listen(const char *host, int port) {
             uvw::Addr peer = tcpClient.peer();
             printf("[+] Draconity transport: encountered network error with connection to peer %s:%u; details: code=%i name=%s\n",
                    peer.ip.c_str(), peer.port, event.code(), event.name());
-            client->onError(event, tcpClient);
+            client->onDisconnect(event, tcpClient);
         });
         tcpClient->on<uvw::EndEvent>([client](const uvw::EndEvent &event, uvw::TCPHandle &tcpClient) {
-            client->onEnd(event, tcpClient);
+            client->onDisconnect(event, tcpClient);
         });
         tcpClient->on<uvw::DataEvent>([client](const uvw::DataEvent &event, uvw::TCPHandle &tcpClient) {
             client->onData(event, tcpClient);
-        });
-        tcpClient->on<uvw::WriteEvent>([client](const uvw::WriteEvent &event, uvw::TCPHandle &tcpClient) {
-            uvw::Addr peer = tcpClient.peer();
         });
 
         lock.lock();
@@ -198,8 +185,7 @@ void UvServer::run() {
     loop->run();
 }
 
-// Send the `msg` of the length `length` to all connected clients.
-// Takes ownership of the memory pointed to by `msg`.
+// Publish (TID 0) the `msg` to all connected clients.
 void UvServer::publish(std::vector<uint8_t> msg) {
     // Per http://docs.libuv.org/en/v1.x/design.html , it's not thread-safe to touch a libuv loop
     // outside of the thread running it, so instead we use http://docs.libuv.org/en/v1.x/async.html
@@ -240,7 +226,6 @@ void draconity_transport_main(transport_msg_fn callback) {
         server->run();
     });
     networkThread.detach();
-
     condvar.wait(ulock);
 }
 
