@@ -1,4 +1,5 @@
 #include <bson.h>
+#include <condition_variable>
 #include <cstring>
 #include <inttypes.h>
 #include <memory>
@@ -50,14 +51,13 @@ class UvClient {
                 }
             }
             if (received_header && recv_buffer.size() >= received_header->length) {
-                uint8_t *buff_start = reinterpret_cast<uint8_t *>(&recv_buffer[0]);
-                bson_t *reply = handle_message_callback(buff_start, received_header->length);
+                bson_t *reply = handle_message_callback(recv_buffer);
                 recv_buffer.erase(recv_buffer.begin(), recv_buffer.begin() + received_header->length);
 
                 uint32_t reply_length;
                 uint8_t *reply_data = bson_destroy_with_steal(reply, true, &reply_length);
                 write_message(received_header->tid, reply_data, reply_length);
-                free(reply_data);
+                bson_free(reply_data);
 
                 received_header = {};
             } else if (received_header) {
@@ -71,15 +71,14 @@ class UvClient {
 
     // Write `msg_len` bytes of `msg` to the client as a published message (i.e. not in
     // response to an incoming message).
-    // Callers are responsible for freeing any data pointed at by `msg` afterwards.
-    void publish(const uint8_t *msg, const size_t msg_len) {
-        write_message(PUBLISH_TID, msg, msg_len);
+    void publish(std::vector<uint8_t> &msg) {
+        write_message(PUBLISH_TID, msg);
     }
 
   private:
     transport_msg_fn handle_message_callback;
     std::shared_ptr<uvw::TCPHandle> tcp;
-    std::vector<char> recv_buffer;
+    std::vector<uint8_t> recv_buffer;
     std::mutex lock;
 
     std::optional<MessageHeader> received_header = {};
@@ -90,7 +89,7 @@ class UvClient {
 
     // Write `msg_len` bytes of `msg` to the client using the given transaction id of `tid`.
     // Callers are responsible for freeing any data pointed at by `msg` afterwards.
-    void write_message(const uint32_t tid, const uint8_t *msg, const size_t msg_len) {
+    void write_message(const uint32_t tid, const uint8_t *msg, size_t msg_len) {
         // We jump through some hoops to allocate a new chunk of memory pointed to by a
         // `unique_ptr` and copy our data to write into that, so that we can pass that into
         // uvw. That way we don't have to worry about `msg`'s lifetime lasting long enough:
@@ -103,12 +102,11 @@ class UvClient {
         std::memcpy(&data_to_write.get()[sizeof(MessageHeader)], msg, msg_len);
         tcp->write(std::move(data_to_write), frame_size);
     }
-};
 
-typedef struct {
-    uint8_t *msg;
-    size_t length;
-} PublishableMessage;
+    void write_message(const uint32_t tid, std::vector<uint8_t> &msg) {
+        write_message(tid, &msg[0], msg.size());
+    }
+};
 
 class UvServer {
   public:
@@ -117,14 +115,14 @@ class UvServer {
     void listen(const char *host, int port);
     void run();
 
-    void publish(uint8_t *msg, size_t length);
+    void publish(std::vector<uint8_t> msg);
 
   private:
     void drain_publish_queue();
 
     transport_msg_fn handle_message_callback;
     std::list<std::shared_ptr<UvClient>> clients;
-    std::list<PublishableMessage> publish_queue;
+    std::list<std::vector<uint8_t>> publish_queue;
     std::shared_ptr<uvw::Loop> loop;
     std::shared_ptr<uvw::AsyncHandle> check_publish_queue_handle;
     std::mutex lock; // protects access to both `clients` and `publish_queue`
@@ -192,7 +190,6 @@ void UvServer::listen(const char *host, int port) {
         srv.accept(*tcpClient);
         tcpClient->read();
     });
-
     tcp->bind(host, port);
     tcp->listen();
 }
@@ -203,60 +200,50 @@ void UvServer::run() {
 
 // Send the `msg` of the length `length` to all connected clients.
 // Takes ownership of the memory pointed to by `msg`.
-void UvServer::publish(uint8_t *msg, const size_t length) {
-    PublishableMessage m = {
-        .msg = msg,
-        .length = length
-    };
-
+void UvServer::publish(std::vector<uint8_t> msg) {
     // Per http://docs.libuv.org/en/v1.x/design.html , it's not thread-safe to touch a libuv loop
     // outside of the thread running it, so instead we use http://docs.libuv.org/en/v1.x/async.html
     // in the form of uvw's AsyncHandle wrapper to signal to the event loop that there are messages
     // which need to be delivered.
     lock.lock();
-    publish_queue.push_back(m);
+    publish_queue.push_back(std::move(msg));
     lock.unlock();
     check_publish_queue_handle->send();
 }
 
 void UvServer::drain_publish_queue() {
     lock.lock();
-    for (PublishableMessage m : publish_queue) {
+    for (auto m : publish_queue) {
         for (auto const &client : clients) {
-            client->publish(m.msg, m.length);
+            client->publish(m);
         }
-        free(m.msg);
     }
     publish_queue.clear();
     lock.unlock();
 }
 
-// `started_server` is initialized in a separate thread, so we should only read it
-// while `started_server_lock` is locked.
-std::mutex started_server_lock;
-UvServer *started_server = nullptr;
+UvServer *server = nullptr;
 
 void draconity_transport_main(transport_msg_fn callback) {
-    std::thread networkThread([callback] {
+    std::mutex lock;
+    std::condition_variable condvar;
+    std::unique_lock<std::mutex> ulock(lock);
+
+    std::thread networkThread([&condvar, callback] {
         auto port = 8000;
         auto addr = "127.0.0.1";
         printf("[+] Draconity transport: TCP server starting on %s:%i\n", addr, port);
 
-        started_server_lock.lock();
-        UvServer server(callback);
-        server.listen(addr, port);
-        started_server = &server;
-        started_server_lock.unlock();
-
-        server.run();
+        server = new UvServer(callback);
+        server->listen(addr, port);
+        condvar.notify_one();
+        server->run();
     });
     networkThread.detach();
+
+    condvar.wait(ulock);
 }
 
-void draconity_transport_publish(uint8_t *data, uint32_t size) {
-    started_server_lock.lock();
-    if (started_server) {
-        started_server->publish(data, size);
-    }
-    started_server_lock.unlock();
+void draconity_transport_publish(std::vector<uint8_t> data) {
+    server->publish(std::move(data));
 }

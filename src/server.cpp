@@ -1,4 +1,5 @@
 #include <sstream>
+#include <vector>
 
 #include <bson.h>
 #include <stdarg.h>
@@ -28,7 +29,11 @@ void draconity_publish(const char *topic, bson_t *obj) {
     BSON_APPEND_UTF8(obj, "topic", topic);
     uint32_t length = 0;
     uint8_t *buf = bson_destroy_with_steal(obj, true, &length);
-    draconity_transport_publish(buf, length);
+    if (length > 0) {
+        std::vector<uint8_t> vec(buf, buf + length);
+        draconity_transport_publish(std::move(vec));
+    }
+    bson_free(buf);
 }
 
 void draconity_logf(const char *fmt, ...) {
@@ -81,7 +86,7 @@ static int grammar_unload(Grammar *g) {
     return rc;
 }
 
-static bson_t *handle_message(const uint8_t *msg, uint32_t msglen) {
+static bson_t *handle_message(const std::vector<uint8_t> &msg) {
     std::ostringstream errstream;
     std::string errmsg = "";
 
@@ -96,7 +101,7 @@ static bson_t *handle_message(const uint8_t *msg, uint32_t msglen) {
 
     bson_t *resp = NULL;
     bson_t root;
-    if (!bson_init_static(&root, msg, msglen)) {
+    if (!bson_init_static(&root, &msg[0], msg.size())) {
         errmsg = "bson init error";
         goto end;
     }
@@ -543,7 +548,7 @@ end:
         resp = BCON_NEW("success", BCON_BOOL(false), "error", BCON_UTF8(errmsg.c_str()));
     }
     // reinit to reset + appease ASAN
-    if (bson_init_static(&root, msg, msglen)) {
+    if (bson_init_static(&root, &msg[0], msg.size())) {
         BSON_APPEND_DOCUMENT(pub, "cmd", &root);
         draconity_publish("cmd", pub);
     }
@@ -579,12 +584,16 @@ static const char *micstates[] = {
     "resume",
 };
 
+std::mutex readyLock;
+
 void draconity_ready() {
+    readyLock.lock();
     if (!draconity->ready) {
         printf("[+] status: ready\n");
         draconity_publish("status", BCON_NEW("cmd", BCON_UTF8("ready")));
         draconity->ready = true;
     }
+    readyLock.unlock();
 }
 
 void draconity_attrib_changed(int key, dsx_attrib *attrib) {
