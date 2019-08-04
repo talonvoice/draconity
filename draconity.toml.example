@@ -1,0 +1,12 @@
+timeout = 1
+timeout_incomplete = 500
+prevent_wake = true
+# please generate a secure token for your secret, such as `head -c16 /dev/urandom | xxd -ps`
+secret = ""
+
+[[socket]]
+host = "127.0.0.1"
+port = 38065
+
+[[pipe]]
+path = "~/.talon/.sys/draconity.sock"

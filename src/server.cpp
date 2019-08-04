@@ -570,7 +570,7 @@ unsupported_command:
 void draconity_init() {
     printf("[+] draconity init\n");
     // FIXME: this should just be draconity class init?
-    draconity_transport_main(handle_message);
+    draconity_transport_main(handle_message, draconity->config);
     draconity_publish("status", BCON_NEW("cmd", BCON_UTF8("thread_created")));
     draconity->start_ts = bson_get_monotonic_time();
 }

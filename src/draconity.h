@@ -8,6 +8,7 @@
 #include <unordered_set>
 #include <cstring>
 
+#include "cpptoml.h"
 #include "types.h"
 
 typedef struct {
@@ -77,15 +78,7 @@ public:
 
     std::string set_dragon_enabled(bool enabled);
 private:
-    Draconity() {
-        micstate = NULL;
-        ready = false;
-        start_ts = 0;
-        serial = 0;
-        dragon_enabled = false;
-        mimic_success = false;
-        engine = NULL;
-    }
+    Draconity();
     Draconity(const Draconity &);
     Draconity& operator=(const Draconity &);
 
@@ -103,10 +96,16 @@ public:
     std::mutex dragon_lock;
     bool dragon_enabled;
 
+    std::shared_ptr<cpptoml::table> config;
     std::mutex mimic_lock;
     std::condition_variable mimic_cond;
     bool mimic_success;
     drg_engine *engine;
+
+    // loaded from the config
+    int timeout;
+    int timeout_incomplete;
+    bool prevent_wake;
 };
 
 #define draconity (Draconity::shared())

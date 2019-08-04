@@ -1,5 +1,12 @@
 #include "platform.h"
 
+std::string Platform::expanduser(std::string path) {
+    if (path[0] == '~' && path[1] == '/') {
+        return Platform::homedir() + "/" + path.substr(2);
+    }
+    return path;
+}
+
 #ifdef __APPLE__
 
 #include <unistd.h>
@@ -7,6 +14,8 @@
 extern "C" {
 #include "CoreSymbolication.h"
 }
+#include <sys/types.h>
+#include <pwd.h>
 
 size_t Platform::pageSize() {
     return getpagesize();
@@ -90,6 +99,20 @@ int Platform::applyHooks(std::string moduleName, std::list<CodeHook> hooks) {
     return 0;
 };
 
+std::string Platform::homedir() {
+    char *home = getenv("HOME");
+    if (home) {
+        return strdup(home);
+    } else {
+        struct passwd pw, *pwp;
+        char buf[1024];
+        if (getpwuid_r(getuid(), &pw, buf, sizeof(buf), &pwp) == 0) {
+            return std::string(pwp->pw_dir);
+        }
+        return "";
+    }
+}
+
 #else // windows
 
 #include <windows.h>
@@ -157,5 +180,16 @@ int Platform::applyHooks(std::string moduleName, std::list<CodeHook> hooks) {
     }
     return 0;
 };
+
+std::string homedir() {
+    // This should return "<userdir>/AppData/Roaming" on Windows 7+.
+    // E.g: "C:/Users/Michael/AppData/Roaming"
+    char *home = getenv("APPDATA");
+    if (home) {
+        return std::string(home);
+    } else {
+        return "";
+    }
+}
 
 #endif

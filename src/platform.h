@@ -14,4 +14,6 @@ public:
     static void protectRX(void *addr, size_t size);
     static int loadSymbols(std::string module, std::list<SymbolLoad> loads);
     static int applyHooks(std::string module, std::list<CodeHook> hooks);
+    static std::string homedir();
+    static std::string expanduser(std::string path);
 };

@@ -10,6 +10,7 @@
 #include <thread>
 #include <uvw.hpp>
 
+#include "platform.h"
 #include "transport.h"
 
 #define PUBLISH_TID 0
@@ -27,10 +28,12 @@ public:
 
 template <typename T>
 class UvClient : public UvClientBase {
-  public:
-    UvClient(std::shared_ptr<T> stream, transport_msg_fn callback) {
+public:
+    UvClient(std::shared_ptr<T> stream, transport_msg_fn callback, std::string secret) {
         this->stream = stream;
         this->handle_message_callback = callback;
+        this->authed = false;
+        this->secret = secret;
     }
 
     template <typename E>
@@ -77,7 +80,9 @@ class UvClient : public UvClientBase {
         write_message(PUBLISH_TID, msg);
     }
 
-  private:
+private:
+    std::string secret;
+    bool authed;
     transport_msg_fn handle_message_callback;
     std::shared_ptr<T> stream;
     std::vector<uint8_t> recv_buffer;
@@ -110,8 +115,8 @@ class UvClient : public UvClientBase {
 };
 
 class UvServer {
-  public:
-    UvServer(transport_msg_fn callback);
+public:
+    UvServer(transport_msg_fn callback, std::shared_ptr<cpptoml::table> config);
     ~UvServer();
     void listenTCP(std::string host, int port);
     void listenPipe(std::string path);
@@ -120,10 +125,12 @@ class UvServer {
     void publish(std::vector<uint8_t> msg);
     void invoke(std::function<void()> fn);
 
-  private:
+private:
+    std::string secret;
     void drain_invoke_queue();
 
     transport_msg_fn handle_message_callback;
+    std::shared_ptr<cpptoml::table> config;
     std::list<std::shared_ptr<UvClientBase>> clients;
     std::list<std::function<void()>> invoke_queue;
     std::shared_ptr<uvw::Loop> loop;
@@ -131,7 +138,8 @@ class UvServer {
     std::mutex lock; // protects access to `invoke_queue`
 };
 
-UvServer::UvServer(transport_msg_fn callback) {
+UvServer::UvServer(transport_msg_fn callback, std::shared_ptr<cpptoml::table> config) {
+    this->config = config;
     handle_message_callback = callback;
     loop = uvw::Loop::create();
 
@@ -142,6 +150,47 @@ UvServer::UvServer(transport_msg_fn callback) {
     async_invoke_handle->on<uvw::ErrorEvent>([](auto &, auto &) {
         printf("[!] draconity transport: received error event for checking invoke queue!");
     });
+
+    this->secret = config->get_as<std::string>("secret").value_or("");
+    bool listening = false;
+    // TODO: auth connections with secret?
+    if (config) {
+        auto sockets = config->get_table_array("socket");
+        if (secret != "" && sockets) {
+            for (auto socket : *sockets) {
+                auto host = socket->get_as<std::string>("host").value_or("");
+                auto port = socket->get_as<int>("port").value_or(0);
+                if (host != "" && port > 0) {
+                    printf("[+] draconity transport: binding TCP at %s:%i\n", host.c_str(), port);
+                    this->listenTCP(host, port);
+                    listening = true;
+                }
+            }
+        }
+        auto pipes = config->get_table_array("pipe");
+        if (secret != "" && pipes) {
+            for (auto pipe : *pipes) {
+                auto path = pipe->get_as<std::string>("path").value_or("");
+                if (path != "") {
+                    printf("[+] draconity transport: binding pipe at %s\n", path.c_str());
+                    // if we're on mac, this is a file and we need to expand ~/ to HOME and unlink the old socket
+                    // (on windows it's a global named pipe)
+#ifdef __APPLE__
+                    path = Platform::expanduser(path);
+                    unlink(path.c_str());
+#endif
+                    this->listenPipe(path);
+                    listening = true;
+                }
+            }
+        }
+    }
+    if (!listening) {
+        printf("[!] error: no socket/pipe configured in draconity.yml, not listening for connections\n");
+    }
+    if (secret == "") {
+        printf("[+] error: no secret configured in draconity.yml, not accepting connections\n");
+    }
 }
 
 UvServer::~UvServer() {
@@ -167,7 +216,7 @@ void UvServer::listenTCP(std::string host, int port) {
         auto stream = srv.loop().resource<uvw::TCPHandle>();
         printf("[+] draconity transport: accepted TCP connection from peer %s\n", peername(stream->peer()).c_str());
 
-        auto client = std::make_shared<UvClient<uvw::TCPHandle>>(stream, handle_message_callback);
+        auto client = std::make_shared<UvClient<uvw::TCPHandle>>(stream, handle_message_callback, this->secret);
         auto baseClient = std::static_pointer_cast<UvClientBase>(client);
         stream->once<uvw::CloseEvent>([this, baseClient](auto &, auto &stream) {
             printf("[+] draconity transport: closing TCP connection to peer %s\n", peername(stream.peer()).c_str());
@@ -203,7 +252,7 @@ void UvServer::listenPipe(std::string path) {
         auto stream = srv.loop().resource<uvw::PipeHandle>();
         printf("[+] draconity transport: accepted pipe connection from peer %s\n", peername(stream->peer()).c_str());
 
-        auto client = std::make_shared<UvClient<uvw::PipeHandle>>(stream, handle_message_callback);
+        auto client = std::make_shared<UvClient<uvw::PipeHandle>>(stream, handle_message_callback, this->secret);
         auto baseClient = std::static_pointer_cast<UvClientBase>(client);
         stream->once<uvw::CloseEvent>([this, baseClient](auto &, auto &stream) {
             printf("[+] draconity transport: closing pipe connection to peer %s\n", peername(stream.peer()).c_str());
@@ -267,31 +316,13 @@ void UvServer::drain_invoke_queue() {
 
 UvServer *server = nullptr;
 
-void draconity_transport_main(transport_msg_fn callback) {
+void draconity_transport_main(transport_msg_fn callback, std::shared_ptr<cpptoml::table> config) {
     std::mutex lock;
     std::condition_variable condvar;
     std::unique_lock<std::mutex> ulock(lock);
 
-    std::thread networkThread([&condvar, callback] {
-        // TODO: configurable host/port/pipe
-        std::string pipe;
-        std::string addr;
-        int port = 0;
-        addr = "127.0.0.1";
-        port = 38065;
-
-        server = new UvServer(callback);
-        if (addr != "") {
-            printf("[+] draconity transport: binding TCP at %s:%i\n", addr.c_str(), port);
-            server->listenTCP(addr, port);
-        }
-        if (pipe != "") {
-            printf("[+] draconity transport: binding pipe at %s\n", pipe.c_str());
-            // TODO: make parent directories?
-            // TODO: only pretend it's a file if we're on mac?
-            unlink(pipe.c_str());
-            server->listenPipe(pipe);
-        }
+    std::thread networkThread([&condvar, config, callback] {
+        server = new UvServer(callback, config);
         condvar.notify_one();
         server->run();
     });

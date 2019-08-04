@@ -38,7 +38,7 @@ find_library(UV NAMES libuv.a)
 if (NOT UV)
     message(FATAL_ERROR, "libuv not found")
 endif()
-include_directories(${BSON_INCLUDE} ${ZYDIS_INCLUDE} vendor/uvw/src)
+include_directories(${BSON_INCLUDE} ${ZYDIS_INCLUDE} vendor/uvw/src vendor/cpptoml)
 
 file(GLOB_RECURSE SOURCE src/*.c src/*.cpp)
 add_library(draconity SHARED ${SOURCE})

@@ -1,6 +1,3 @@
-#include <fcntl.h>
-#include <libgen.h>
-#include <pthread.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -14,8 +11,6 @@
 #define streq(a, b) !strcmp(a, b)
 #endif
 
-// #define DEBUG
-
 #include "api.h"
 
 int draconity_set_param(const char *key, const char *value) {
@@ -26,52 +21,11 @@ int draconity_set_param(const char *key, const char *value) {
     return ret;
 }
 
-#if defined(_WIN32) || defined(__MINGW32__) || defined(__MINGW64__)
-std::string homedir() {
-    // This should return "<userdir>/AppData/Roaming" on Windows 7+.
-    // E.g: "C:/Users/Michael/AppData/Roaming"
-    char *home = getenv("APPDATA");
-    if (home) {
-        return std::string(home);
-    } else {
-        return "";
-    }
-}
-#elif defined(__APPLE__)
-#include <sys/types.h>
-#include <pwd.h>
-
-std::string homedir() {
-    char *home = getenv("HOME");
-    if (home) {
-        return strdup(home);
-    } else {
-        struct passwd pw, *pwp;
-        char buf[1024];
-        if (getpwuid_r(getuid(), &pw, buf, sizeof(buf), &pwp) == 0) {
-            return std::string(pwp->pw_dir);
-        }
-        return "";
-    }
-}
-#else
-#error "Unsupported OS for homedir"
-#endif // defined(_WIN32) || defined(__MINGW32__) || defined(__MINGW64__)
-
-typedef struct {
-    std::string timeout;
-    std::string timeout_incomplete;
-} config;
-
-static bool prevent_wake = false;
-
 void draconity_set_default_params() {
-    config config = {
-        .timeout = "80",
-        .timeout_incomplete = "500",
-    };
-    draconity_set_param("DwTimeOutComplete", config.timeout.c_str());
-    draconity_set_param("DwTimeOutIncomplete", config.timeout_incomplete.c_str());
+    auto timeout = std::to_string(draconity->timeout);
+    auto timeout_incomplete = std::to_string(draconity->timeout);
+    draconity_set_param("DwTimeOutComplete", timeout.c_str());
+    draconity_set_param("DwTimeOutIncomplete", timeout_incomplete.c_str());
 
     draconity_set_param("DemonThreadPhraseFinishWait", "0");
     // draconity_set_param("TwoPassSkipSecondPass", "1");
@@ -118,9 +72,9 @@ static void engine_setup(drg_engine *engine) {
 }
 
 static void engine_acquire(drg_engine *engine, bool early) {
-    if (!_engine) {
+    if (!draconity->engine) {
         printf("[+] engine acquired\n");
-        _engine = engine;
+        draconity->engine = engine;
         engine_setup(engine);
     }
     if (!early && !draconity->ready) {
@@ -318,13 +272,6 @@ static std::list<SymbolLoad> server_syms {
 #undef s
 
 void draconity_install() {
-#ifdef DEBUG
-    std::string logfile = homedir() + "/draconity.log";
-    freopen(logfile.c_str(), "a", stdout);
-    freopen(logfile.c_str(), "a", stderr);
-    setvbuf(stdout, NULL, _IONBF, 0);
-    setvbuf(stderr, NULL, _IONBF, 0);
-#endif
     printf("[+] draconity starting\n");
     int hooked = 0;
 #ifdef __APPLE__
