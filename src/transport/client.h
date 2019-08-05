@@ -38,7 +38,8 @@ public:
                 }
             }
             if (received_header && recv_buffer.size() >= received_header->length) {
-                handleMessage(recv_buffer);
+                std::vector<uint8_t> msg(recv_buffer.begin(), recv_buffer.begin() + received_header->length);
+                handleMessage(msg);
                 recv_buffer.erase(recv_buffer.begin(), recv_buffer.begin() + received_header->length);
                 received_header = {};
             } else if (received_header) {
@@ -60,7 +61,7 @@ private:
         if (!authed) {
             reply = handleAuth(msg);
         } else {
-            reply = handle_message_callback(recv_buffer);
+            reply = handle_message_callback(msg);
         }
         uint32_t reply_length;
         uint8_t *reply_data = bson_destroy_with_steal(reply, true, &reply_length);
