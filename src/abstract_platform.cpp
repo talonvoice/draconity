@@ -141,7 +141,7 @@ void Platform::protectRX(void *addr, size_t size) {
     VirtualProtect(addr, size, PAGE_EXECUTE_READ, &oldProtect);
 }
 
-int Platform::loadSymbols(std::string moduleName, std::list<SymbolLoad> loads) {
+int Platform::loadSymbols(std::string moduleName, std::list<SymbolLoad> &loads) {
     HMODULE module = GetModuleHandleA(moduleName.c_str());
     if (!module) {
         printf("[!] Failed to open module %s\n", moduleName.c_str());
@@ -161,7 +161,7 @@ int Platform::loadSymbols(std::string moduleName, std::list<SymbolLoad> loads) {
     return 0;
 };
 
-int Platform::applyHooks(std::string moduleName, std::list<CodeHook> hooks) {
+int Platform::applyHooks(std::string moduleName, std::list<CodeHook> &hooks) {
     HMODULE module = GetModuleHandleA(moduleName.c_str());
     if (!module) {
         printf("[!] Failed to open module %s\n", moduleName.c_str());
