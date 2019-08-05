@@ -181,7 +181,7 @@ int Platform::applyHooks(std::string moduleName, std::list<CodeHook> &hooks) {
     return 0;
 };
 
-std::string homedir() {
+std::string Platform::homedir() {
     // This should return "<userdir>/AppData/Roaming" on Windows 7+.
     // E.g: "C:/Users/Michael/AppData/Roaming"
     char *home = getenv("APPDATA");
