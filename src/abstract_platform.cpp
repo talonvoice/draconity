@@ -29,7 +29,7 @@ void *Platform::mmap(size_t size) {
 }
 
 void Platform::munmap(void *addr, size_t size) {
-    munmap(addr, size);
+    ::munmap(addr, size);
 }
 
 void Platform::protectRW(void *addr, size_t size) {
