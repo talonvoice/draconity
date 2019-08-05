@@ -2,6 +2,8 @@
 #define DLAPI
 #endif
 
+#include "types.h"
+
 // dragon 5
 DLAPI drg_engine *(*_DSXEngine_New)();
 // dragon 6

@@ -58,34 +58,6 @@ static bson_t *success_msg() {
     return BCON_NEW("success", BCON_BOOL(true));
 }
 
-static int grammar_unload(Grammar *g) {
-    std::string errmsg;
-    int rc = 0;
-    if (g->enabled) {
-        if ((rc = g->disable(&errmsg))) {
-            draconity_logf("during unload: %s", errmsg.c_str());
-            return rc;
-        }
-    }
-    rc = _DSXGrammar_Destroy(g->handle);
-
-    draconity->keylock.lock();
-    draconity->grammars.erase(g->name);
-    // Don't erase the key outright yet - we make it null for now to avoid race
-    // conditions. See comment in `g.load` for full explanation.
-    draconity->gkeys[g->key] = NULL;
-
-    reusekey *reuse = new reusekey;
-    reuse->key = g->key;
-    reuse->ts = bson_get_monotonic_time();
-    reuse->serial = draconity->serial;
-    draconity->gkfree.push_back(reuse);
-
-    delete g;
-    draconity->keylock.unlock();
-    return rc;
-}
-
 static bson_t *handle_message(const std::vector<uint8_t> &msg) {
     std::ostringstream errstream;
     std::string errmsg = "";
@@ -283,8 +255,8 @@ static bson_t *handle_message(const std::vector<uint8_t> &msg) {
                         goto end;
                     }
                 } else {
-                    grammar->disable(&errmsg);
-                    if (errmsg.size() > 0) {
+                    if (!grammar->disable()) {
+                        errmsg = grammar->error;
                         goto end;
                     }
                 }
@@ -361,7 +333,7 @@ static bson_t *handle_message(const std::vector<uint8_t> &msg) {
         } else if (streq(cmd, "g.unload")) {
             if (!draconity->ready) goto not_ready;
             if (!grammar) goto no_grammar;
-            int rc = grammar_unload(grammar);
+            int rc = grammar->unload();
             if (rc) {
                 errstream << "error unloading grammar: " << rc;
                 errmsg = errstream.str();
@@ -384,8 +356,7 @@ static bson_t *handle_message(const std::vector<uint8_t> &msg) {
             }
             if (grammar) {
                 draconity_logf("warning: reloading \"%s\"", name);
-                // TODO: Encapsulate in Grammar object
-                int rc = grammar_unload(grammar);
+                int rc = grammar->unload();
                 if (rc) {
                     errstream << "error unloading grammar: " << rc;
                     errmsg = errstream.str();

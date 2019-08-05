@@ -10,62 +10,14 @@
 
 #include "cpptoml.h"
 #include "types.h"
+#include "dragon/grammar.h"
+#include "dragon/foreign_grammar.h"
 
 typedef struct {
   uint64_t key;
   uint64_t ts;
   uint64_t serial;
 } reusekey;
-
-class Grammar {
-    public:
-        Grammar(std::string name, std::string main_rule) {
-            this->key = 0;
-            this->name = name;
-            this->main_rule = main_rule;
-            this->handle = nullptr;
-            this->enabled = false;
-            this->exclusive = false;
-            this->priority = 0;
-            this->endkey = 0;
-            this->beginkey = 0;
-            this->hypokey = 0;
-        };
-
-        int disable(std::string *errmsg);
-
-        uintptr_t key;
-        std::string name, main_rule;
-        drg_grammar *handle;
-
-        bool enabled, exclusive;
-        int priority;
-        std::string appname;
-        unsigned int endkey, beginkey, hypokey;
-    private:
-};
-
-class ForeignGrammar {
-    public:
-        ForeignGrammar(drg_grammar *grammar, uint64_t unk1, bool unk2, const char *main_rule) {
-            this->grammar = grammar;
-            this->unk1 = unk1;
-            this->unk2 = unk2;
-            if (main_rule) {
-                this->main_rule = main_rule;
-            }
-        };
-
-        bool matches(drg_grammar *other_grammar, const char *other_main_rule);
-        int activate();
-        int deactivate();
-
-    private:
-        drg_grammar *grammar;
-        uint64_t unk1;
-        bool unk2;
-        std::string main_rule;
-};
 
 class Draconity {
 public:
