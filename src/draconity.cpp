@@ -29,6 +29,7 @@ Draconity::Draconity() {
     if (config) {
         auto logfile = *config->get_as<std::string>("logfile");
         if (logfile != "") {
+            logfile = Platform::expanduser(logfile);
             freopen(logfile.c_str(), "a", stdout);
             freopen(logfile.c_str(), "a", stderr);
             setvbuf(stdout, NULL, _IONBF, 0);
