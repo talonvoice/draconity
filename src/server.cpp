@@ -9,7 +9,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#include "transport.h"
+#include "transport/transport.h"
 #include "phrase.h"
 #include "server.h"
 #include "draconity.h"
