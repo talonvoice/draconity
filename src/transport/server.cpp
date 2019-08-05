@@ -218,19 +218,14 @@ void UvServer::drain_invoke_queue() {
 UvServer *server = nullptr;
 
 void draconity_transport_main(transport_msg_fn callback, std::shared_ptr<cpptoml::table> config) {
-    std::mutex lock;
-    std::condition_variable condvar;
-    std::unique_lock<std::mutex> ulock(lock);
-
-    std::thread networkThread([&condvar, config, callback] {
+    std::thread networkThread([config, callback] {
         server = new UvServer(callback, config);
-        condvar.notify_one();
         server->run();
     });
     networkThread.detach();
-    condvar.wait(ulock);
 }
 
 void draconity_transport_publish(std::vector<uint8_t> data) {
+    if (!server) return;
     server->publish(std::move(data));
 }
