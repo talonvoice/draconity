@@ -1,7 +1,7 @@
 #include <Zydis/Zydis.h>
 #include <string>
 
-#include "platform.h"
+#include "abstract_platform.h"
 #include "code_hook.h"
 
 static size_t dis_code_size(uint8_t *addr, size_t size) {

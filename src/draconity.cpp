@@ -3,7 +3,7 @@
 #include <stdio.h>
 
 #include "draconity.h"
-#include "platform.h"
+#include "abstract_platform.h"
 
 void draconity_install();
 static Draconity *instance = NULL;

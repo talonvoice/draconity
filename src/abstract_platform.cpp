@@ -1,4 +1,4 @@
-#include "platform.h"
+#include "abstract_platform.h"
 
 std::string Platform::expanduser(std::string path) {
     if (path[0] == '~' && path[1] == '/') {
