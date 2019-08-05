@@ -67,7 +67,7 @@ static int walk_image(std::string image, std::function<void(std::string, void *,
     return 0;
 }
 
-int Platform::loadSymbols(std::string moduleName, std::list<SymbolLoad> loads) {
+int Platform::loadSymbols(std::string moduleName, std::list<SymbolLoad> &loads) {
     walk_image(moduleName, [&loads](std::string name, void *addr, size_t size) {
         for (auto &symbol_load : loads) {
             if (name == symbol_load.name) {
@@ -83,7 +83,7 @@ int Platform::loadSymbols(std::string moduleName, std::list<SymbolLoad> loads) {
     return 0;
 };
 
-int Platform::applyHooks(std::string moduleName, std::list<CodeHook> hooks) {
+int Platform::applyHooks(std::string moduleName, std::list<CodeHook> &hooks) {
     walk_image(moduleName, [&hooks](std::string name, void *addr, size_t size) {
         for (auto &hook : hooks) {
             if (name == hook.name) {

@@ -7,10 +7,6 @@
 #include "draconity.h"
 #include "platform.h"
 
-#ifndef streq
-#define streq(a, b) !strcmp(a, b)
-#endif
-
 #include "api.h"
 
 int draconity_set_param(const char *key, const char *value) {
@@ -201,10 +197,11 @@ static int DSXEngine_LoadGrammar(drg_engine *engine, int format, void *data, voi
     engine_acquire(engine, false);
     return orig_DSXEngine_LoadGrammar(engine, format, data, grammar);
 }
+
 } // extern "C"
 
 #define h(name) makeCodeHook(#name, name, &orig_##name)
-static std::list<CodeHook> server_hooks = {
+static std::list<CodeHook> server_hooks {
     h(DSXEngine_New),
     h(DSXEngine_Create),
     h(DSXEngine_GetMicState),
@@ -271,10 +268,13 @@ static std::list<SymbolLoad> server_syms {
 };
 #undef s
 
+extern int talon_draconity_install(std::list<SymbolLoad> server_syms, std::list<CodeHook> server_hooks);
 void draconity_install() {
     printf("[+] draconity starting\n");
     int hooked = 0;
-#ifdef __APPLE__
+#ifdef TALON_BUILD
+    hooked |= talon_draconity_install(server_syms, server_hooks);
+#elif defined(__APPLE__)
     hooked |= Platform::loadSymbols("server.so", server_syms);
     hooked |= Platform::applyHooks("server.so", server_hooks);
 #else
