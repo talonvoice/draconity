@@ -2512,6 +2512,7 @@ class parser
         }
         else
         {
+            value = 0;
             throw_parse_exception("Invalid escape sequence");
         }
         ++it;
