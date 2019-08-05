@@ -1,3 +1,4 @@
+#include "bson/bson.h"
 #include "transport/transport.h"
 
 class UvClientBase {
@@ -36,14 +37,8 @@ public:
                 }
             }
             if (received_header && recv_buffer.size() >= received_header->length) {
-                bson_t *reply = handle_message_callback(recv_buffer);
+                handleMessage(recv_buffer);
                 recv_buffer.erase(recv_buffer.begin(), recv_buffer.begin() + received_header->length);
-
-                uint32_t reply_length;
-                uint8_t *reply_data = bson_destroy_with_steal(reply, true, &reply_length);
-                write_message(received_header->tid, reply_data, reply_length);
-                bson_free(reply_data);
-
                 received_header = {};
             } else if (received_header) {
                 // we haven't got enough data to parse the body yet
@@ -55,25 +50,66 @@ public:
     // Write `msg` to the client as a published message (i.e. not in
     // response to an incoming message).
     void publish(const std::vector<uint8_t> &msg) override {
-        write_message(PUBLISH_TID, msg);
+        writeMessage(PUBLISH_TID, msg);
     }
 
 private:
-    std::string secret;
-    bool authed;
-    transport_msg_fn handle_message_callback;
-    std::shared_ptr<T> stream;
-    std::vector<uint8_t> recv_buffer;
+    void handleMessage(std::vector<uint8_t> &msg) {
+        bson_t *reply = nullptr;
+        if (!authed) {
+            reply = handleAuth(msg);
+        } else {
+            reply = handle_message_callback(recv_buffer);
+        }
+        uint32_t reply_length;
+        uint8_t *reply_data = bson_destroy_with_steal(reply, true, &reply_length);
+        writeMessage(received_header->tid, reply_data, reply_length);
+        bson_free(reply_data);
+    }
 
-    std::optional<MessageHeader> received_header = {};
-    // MessageHeader received_header = null;
-
-    // uint32_t msg_tid = 0;
-    // uint32_t msg_len = 0;
+    bson_t *handleAuth(std::vector<uint8_t> &msg) {
+        std::string cmd, secret;
+        bson_t root;
+        if (!bson_init_static(&root, &msg[0], msg.size())) {
+            return BCON_NEW(
+                "success", BCON_BOOL(false),
+                "error",   BCON_UTF8("failed to parse BSON"));
+        }
+        bson_iter_t iter;
+        if (bson_iter_init(&iter, &root)) {
+            while (bson_iter_next(&iter)) {
+                std::string key = bson_iter_key(&iter);
+                if (key == "cmd" && BSON_ITER_HOLDS_UTF8(&iter)) {
+                    cmd = bson_iter_utf8(&iter, NULL);
+                } else if (key == "secret" && BSON_ITER_HOLDS_UTF8(&iter)) {
+                    secret = bson_iter_utf8(&iter, NULL);
+                }
+            }
+        }
+        if (cmd == "auth") {
+            // constant time ish compare
+            if (secret.size() == this->secret.size() && this->secret != "") {
+                int diff = 0;
+                for (int i = 0; i < secret.size(); i++) {
+                    diff |= secret[i] ^ this->secret[i];
+                }
+                if (diff == 0) {
+                    this->authed = true;
+                    return BCON_NEW("success", BCON_BOOL(true));
+                }
+            }
+            return BCON_NEW(
+                "success", BCON_BOOL(false),
+                "error",   BCON_UTF8("authentication failed"));
+        }
+        return BCON_NEW(
+            "success", BCON_BOOL(false),
+            "error",   BCON_UTF8("authentication required"));
+    }
 
     // Write `msg_len` bytes of `msg` to the client using the given transaction id of `tid`.
     // Callers are responsible for freeing any data pointed at by `msg` afterwards.
-    void write_message(const uint32_t tid, const uint8_t *msg, size_t msg_len) {
+    void writeMessage(const uint32_t tid, const uint8_t *msg, size_t msg_len) {
         // We jump through some hoops to allocate a new chunk of memory pointed to by a
         // `unique_ptr` and copy our data to write into that, so that we can pass that into
         // uvw. That way we don't have to worry about `msg`'s lifetime lasting long enough:
@@ -87,7 +123,16 @@ private:
         stream->write(std::move(data_to_write), frame_size);
     }
 
-    void write_message(const uint32_t tid, const std::vector<uint8_t> &msg) {
-        write_message(tid, &msg[0], msg.size());
+    void writeMessage(const uint32_t tid, const std::vector<uint8_t> &msg) {
+        writeMessage(tid, &msg[0], msg.size());
     }
+
+private:
+    std::string secret;
+    bool authed;
+    transport_msg_fn handle_message_callback;
+    std::shared_ptr<T> stream;
+    std::vector<uint8_t> recv_buffer;
+
+    std::optional<MessageHeader> received_header = {};
 };
