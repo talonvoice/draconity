@@ -4,6 +4,7 @@
 class UvClientBase {
 public:
     virtual void publish(const std::vector<uint8_t> &msg) {}
+    virtual ~UvClientBase() {};
 };
 
 template <typename T>
