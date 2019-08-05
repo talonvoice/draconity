@@ -62,7 +62,7 @@ static bson_t *handle_message(const std::vector<uint8_t> &msg) {
     std::ostringstream errstream;
     std::string errmsg = "";
 
-    Grammar *grammar = NULL;
+    std::shared_ptr<Grammar> grammar = nullptr;
     char *cmd = NULL, *name = NULL, *list = NULL, *main_rule = NULL;
     bool enabled = false, exclusive = false;
     int priority = 0, counter;
@@ -112,7 +112,7 @@ static bson_t *handle_message(const std::vector<uint8_t> &msg) {
         }
     }
     if (name)
-        grammar = draconity->grammar_get(name);
+        grammar = draconity->grammars[name];
     if (!cmd) {
         errmsg = "missing or broken cmd field";
         goto end;
@@ -232,35 +232,16 @@ static bson_t *handle_message(const std::vector<uint8_t> &msg) {
             if (!grammar) goto no_grammar;
 
             if (has_enabled && enabled != grammar->enabled) {
+                int rc = 0;
                 if (enabled) {
-                    int rc = 0;
-                    if ((rc = _DSXGrammar_Activate(grammar->handle, 0, false, grammar->main_rule.c_str()))) {
-                        errstream << "error activating grammar: " << rc;
-                        errmsg = errstream.str();
-                        goto end;
-                    }
-                    if ((rc = _DSXGrammar_RegisterEndPhraseCallback(grammar->handle, phrase_end, (void *)grammar->key, &grammar->endkey))) {
-                        errstream << "error registering end phrase callback: " << rc;
-                        errmsg = errstream.str();
-                        goto end;
-                    }
-                    if ((rc = _DSXGrammar_RegisterPhraseHypothesisCallback(grammar->handle, phrase_hypothesis, (void *)grammar->key, &grammar->hypokey))) {
-                        errstream << "error registering phrase hypothesis callback: " << rc;
-                        errmsg = errstream.str();
-                        goto end;
-                    }
-                    if ((rc = _DSXGrammar_RegisterBeginPhraseCallback(grammar->handle, phrase_begin, (void *)grammar->key, &grammar->beginkey))) {
-                        errstream << "error registering begin phrase callback: " << rc;
-                        errmsg = errstream.str();
-                        goto end;
-                    }
+                    rc = grammar->enable();
                 } else {
-                    if (!grammar->disable()) {
-                        errmsg = grammar->error;
-                        goto end;
-                    }
+                    rc = grammar->disable();
                 }
-                grammar->enabled = enabled;
+                if (rc) {
+                    errmsg = grammar->error;
+                    goto end;
+                }
             }
             if (has_exclusive && exclusive != grammar->exclusive) {
                 int rc = _DSXGrammar_SetSpecialGrammar(grammar->handle, exclusive);
@@ -363,27 +344,22 @@ static bson_t *handle_message(const std::vector<uint8_t> &msg) {
                     goto end;
                 }
             }
-            grammar = new Grammar(name, main_rule);
-            // FIXME: this still needs to be cleaned up as part of porting to C++
-            dsx_dataptr dp = {.data = (void *)data_buf, .size = data_len};
-
-            int ret = _DSXEngine_LoadGrammar(_engine, 1 /*cfg*/, &dp, &grammar->handle);
-            if (ret > 0) {
-                errstream << "error loading grammar: " << ret;
-                errmsg = errstream.str();
-                delete grammar;
+            grammar = std::make_shared<Grammar>(name, main_rule);
+            int ret = grammar->load((void *)data_buf, data_len);
+            if (ret) {
+                errmsg = grammar->error;
                 goto end;
             }
+            draconity->keylock.lock();
             draconity->grammars[grammar->name] = grammar;
             // keys are used to associate grammar objects with callbacks
             // in a way that allows us to free the grammar objects without crashing if a callback was in flight
             // once freed, keys can be reused after 30 seconds, or if the global serial has increased by at least 3
             // (to prevent both callback confusion and key explosion)
             int64_t now = bson_get_monotonic_time();
-            draconity->keylock.lock();
-            reusekey * key_to_reuse = NULL;
+            reusekey *key_to_reuse = NULL;
             // Search all free keys for one that's reusable.
-            for (reusekey * free_key : draconity->gkfree) {
+            for (reusekey *free_key : draconity->gkfree) {
                 if (now - free_key->ts > 30 * SEC || free_key->serial + 3 <= draconity->serial) {
                     // This key is reusable. Store it and jump to the next step.
                     key_to_reuse = free_key;
@@ -420,7 +396,7 @@ static bson_t *handle_message(const std::vector<uint8_t> &msg) {
         // Iterate over an index and the current grammar
         int i = 0;
         for (const auto& pair : draconity->grammars) {
-            Grammar *grammar = pair.second;
+            auto grammar = pair.second;
             bson_uint32_to_string(i, &key, keystr, sizeof(keystr));
             BSON_APPEND_DOCUMENT_BEGIN(&grammars, key, &child);
             BSON_APPEND_UTF8(&child, "name", grammar->name.c_str());
@@ -517,6 +493,9 @@ end:
     if (errmsg.size() > 0) {
         bson_free(resp);
         resp = BCON_NEW("success", BCON_BOOL(false), "error", BCON_UTF8(errmsg.c_str()));
+    }
+    if (!resp) {
+        resp = BCON_NEW("success", BCON_BOOL(false), "error", BCON_UTF8("server did not return a response"));
     }
     // reinit to reset + appease ASAN
     if (bson_init_static(&root, &msg[0], msg.size())) {

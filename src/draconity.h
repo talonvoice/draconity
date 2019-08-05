@@ -24,10 +24,6 @@ public:
     static Draconity *shared();
 
     std::string gkey_to_name(uintptr_t gkey);
-
-    Grammar *grammar_get(const char *name);
-    void grammar_set(Grammar *grammar);
-
     std::string set_dragon_enabled(bool enabled);
 private:
     Draconity();
@@ -36,8 +32,8 @@ private:
 
 public:
     std::mutex keylock;
-    std::map<std::string, Grammar *> grammars;
-    std::map<uintptr_t, Grammar *> gkeys;
+    std::map<std::string, std::shared_ptr<Grammar>> grammars;
+    std::map<uintptr_t, std::shared_ptr<Grammar>> gkeys;
     std::list<reusekey *> gkfree;
 
     const char *micstate;

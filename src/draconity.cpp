@@ -54,19 +54,9 @@ std::string Draconity::gkey_to_name(uintptr_t gkey) {
     this->keylock.lock();
     auto it = this->gkeys.find(gkey);
     if (it != this->gkeys.end())
-        ret = it->first;
+        ret = it->second->name;
     this->keylock.unlock();
     return ret;
-}
-
-Grammar *Draconity::grammar_get(const char *name) {
-    std::unique_lock lock(keylock);
-    return this->grammars[name];
-}
-
-void Draconity::grammar_set(Grammar *grammar) {
-    std::unique_lock lock(keylock);
-    this->grammars[grammar->name] = grammar;
 }
 
 std::string Draconity::set_dragon_enabled(bool enabled) {

@@ -19,6 +19,7 @@ class Grammar {
 
         int enable();
         int disable();
+        int load(void *data, uint32_t size);
         int unload();
         std::string error;
 
