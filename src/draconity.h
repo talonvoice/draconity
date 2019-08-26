@@ -11,7 +11,7 @@
 #include "cpptoml.h"
 #include "types.h"
 #include "dragon/grammar.h"
-#include "dragon/foreign_grammar.h"
+#include "dragon/foreign_rule.h"
 
 typedef struct {
   uint64_t key;
@@ -40,7 +40,7 @@ public:
     bool ready;
     uint64_t start_ts, serial;
 
-    std::list<ForeignGrammar *> dragon_grammars;
+    std::list<ForeignRule *> dragon_rules;
     std::mutex dragon_lock;
     bool dragon_enabled;
 

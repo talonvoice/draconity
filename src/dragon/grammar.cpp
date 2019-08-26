@@ -1,4 +1,5 @@
 #include <sstream>
+#include <set>
 #include "grammar.h"
 #include "draconity.h"
 #include "server.h"
@@ -7,11 +8,6 @@
 int Grammar::enable() {
     std::stringstream errstream;
     int rc = 0;
-    if ((rc = _DSXGrammar_Activate(this->handle, 0, false, this->main_rule.c_str()))) {
-        errstream << "error activating grammar: " << rc;
-        error = errstream.str();
-        return rc;
-    }
     this->enabled = true;
     if ((rc = _DSXGrammar_RegisterEndPhraseCallback(this->handle, phrase_end, (void *)this->key, &this->endkey))) {
         errstream << "error registering end phrase callback: " << rc;
@@ -32,12 +28,6 @@ int Grammar::disable() {
     this->enabled = false;
     std::stringstream errstream;
     int rc = 0;
-    if ((rc =_DSXGrammar_Deactivate(this->handle, 0, this->main_rule.c_str()))) {
-        errstream << "error deactivating grammar: " << rc;
-        error = errstream.str();
-        return rc;
-    }
-    this->enabled = true;
     if ((rc =_DSXGrammar_Unregister(this->handle, this->endkey))) {
         errstream << "error removing end cb: " << rc;
     } else if ((rc = _DSXGrammar_Unregister(this->handle, this->hypokey))) {
@@ -46,6 +36,61 @@ int Grammar::disable() {
         errstream << "error removing begin cb: %d" << rc;
     }
     if (rc) {
+        error = errstream.str();
+    }
+    return rc;
+}
+
+int Grammar::enable_all_rules() {
+    int rc = 0;
+    std::stringstream errstream;
+    for (auto rule : this->top_level_rules) {
+        if ((rc = this->enable_rule(rule))) {
+            // TODO: Continue past this error? Stack them?
+            errstream << "error enabling rule \"" << rule << "\": " << error;
+            error = errstream.str();
+            return rc;
+        }
+    }
+    return rc;
+}
+
+int Grammar::disable_all_rules() {
+    int rc = 0;
+    std::stringstream errstream;
+    // Copy so we can remove from `enabled_rules` within the iterator.
+    std::set<std::string> rules_to_disable (this->active_rules);
+    for (auto rule : rules_to_disable) {
+        if ((rc = this->disable_rule(rule))) {
+            // TODO: Continue past this error? Stack them?
+            errstream << "error disabling rule \"" << rule << "\": " << error;
+            error = errstream.str();
+            return rc;
+        }
+    }
+    return rc;
+}
+
+int Grammar::enable_rule(std::string rule) {
+    std::stringstream errstream;
+    int rc = 0;
+    // TODO: Ensure the grammar has this rule?
+    this->active_rules.insert(rule);
+    if ((rc = _DSXGrammar_Activate(this->handle, 0, false, rule.c_str()))) {
+        errstream << "error activating rule: " << rc;
+        error = errstream.str();
+    }
+    return rc;
+}
+
+int Grammar::disable_rule(std::string rule) {
+    // TODO: Error handling. What if the rule isn't enabled? What if it doesn't
+    // exist in the grammar?
+    this->active_rules.erase(rule);
+    std::stringstream errstream;
+    int rc = 0;
+    if ((rc =_DSXGrammar_Deactivate(this->handle, 0, rule.c_str()))) {
+        errstream << "error deactivating rule: " << rc;
         error = errstream.str();
     }
     return rc;

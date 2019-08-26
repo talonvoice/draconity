@@ -46,8 +46,8 @@ DLAPI int (*_DSXFileSystem_SetUsersDirectory)(drg_filesystem *fs, char *a, bool 
 DLAPI int (*_DSXFileSystem_SetVocabsLocation)(drg_filesystem *fs, char *a, bool unk);
 DLAPI int (*_DSXFileSystem_SetResultsDirectory)(drg_filesystem *fs, char *a, bool unk);
 
-DLAPI int (*_DSXGrammar_Activate)(drg_grammar *grammar, uintptr_t unk1, bool unk2, const char *main_rule);
-DLAPI int (*_DSXGrammar_Deactivate)(drg_grammar *grammar, uintptr_t unk1, const char *main_rule);
+DLAPI int (*_DSXGrammar_Activate)(drg_grammar *grammar, uintptr_t unk1, bool unk2, const char *rule);
+DLAPI int (*_DSXGrammar_Deactivate)(drg_grammar *grammar, uintptr_t unk1, const char *rule);
 DLAPI int (*_DSXGrammar_Destroy)(drg_grammar *);
 DLAPI int (*_DSXGrammar_GetList)(drg_grammar *grammar, const char *name, dsx_dataptr *data);
 DLAPI int (*_DSXGrammar_RegisterBeginPhraseCallback)(drg_grammar *grammar, int (*cb)(void *, void *), void *user, unsigned int *key);

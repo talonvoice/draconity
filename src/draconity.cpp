@@ -64,7 +64,7 @@ std::string Draconity::set_dragon_enabled(bool enabled) {
     std::string errmsg;
     this->dragon_lock.lock();
     if (enabled != this->dragon_enabled) {
-        for (ForeignGrammar *fg : this->dragon_grammars) {
+        for (ForeignRule *fg : this->dragon_rules) {
             int rc;
             if (enabled) {
                 if ((rc = fg->activate())) {

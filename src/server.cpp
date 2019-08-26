@@ -233,10 +233,22 @@ static bson_t *handle_message(const std::vector<uint8_t> &msg) {
 
             if (has_enabled && enabled != grammar->enabled) {
                 int rc = 0;
+                // Rule enabling has been separated. Handle the grammar first,
+                // then the rules.
                 if (enabled) {
                     rc = grammar->enable();
                 } else {
                     rc = grammar->disable();
+                }
+                if (rc) {
+                    errmsg = grammar->error;
+                    goto end;
+                }
+                // Now handle the rules.
+                if (enabled) {
+                    rc = grammar->enable_all_rules();
+                } else {
+                    rc = grammar->disable_all_rules();
                 }
                 if (rc) {
                     errmsg = grammar->error;
@@ -344,7 +356,10 @@ static bson_t *handle_message(const std::vector<uint8_t> &msg) {
                     goto end;
                 }
             }
-            grammar = std::make_shared<Grammar>(name, main_rule);
+            // HACK: Stopgap so we can still expose the same API. Need to figure
+            // out how to expose rule enabling.
+            std::list<std::string> rules = {main_rule};
+            grammar = std::make_shared<Grammar>(name, rules);
             int ret = grammar->load((void *)data_buf, data_len);
             if (ret) {
                 errmsg = grammar->error;
