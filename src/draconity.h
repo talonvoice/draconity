@@ -13,17 +13,10 @@
 #include "dragon/grammar.h"
 #include "dragon/foreign_rule.h"
 
-typedef struct {
-  uint64_t key;
-  uint64_t ts;
-  uint64_t serial;
-} reusekey;
-
 class Draconity {
 public:
     static Draconity *shared();
 
-    std::string gkey_to_name(uintptr_t gkey);
     std::string set_dragon_enabled(bool enabled);
 private:
     Draconity();
@@ -31,14 +24,12 @@ private:
     Draconity& operator=(const Draconity &);
 
 public:
-    std::mutex keylock;
     std::map<std::string, std::shared_ptr<Grammar>> grammars;
-    std::map<uintptr_t, std::shared_ptr<Grammar>> gkeys;
-    std::list<reusekey *> gkfree;
+    std::map<std::string, GrammarState> shadow_grammars;
 
     const char *micstate;
     bool ready;
-    uint64_t start_ts, serial;
+    uint64_t start_ts;
 
     std::list<ForeignRule *> dragon_rules;
     std::mutex dragon_lock;

@@ -2,18 +2,23 @@
 #include <string>
 #include <list>
 #include <set>
+#include <vector>
+#include <unordered_map>
 #include "types.h"
+
+struct GrammarState {
+    std::vector<uint8_t> blob;
+    std::set<std::string> active_rules;
+    std::unordered_map<std::string, std::set<std::string>> lists;
+    bool unload;
+};
 
 class Grammar {
     public:
-    Grammar(std::string name, std::list<std::string> top_level_rules) {
+    Grammar() {
             this->key = 0;
-            this->name = name;
-            this->top_level_rules = top_level_rules;
-            this->active_rules = std::set<std::string>();
             this->handle = nullptr;
             this->enabled = false;
-            this->exclusive = false;
             this->priority = 0;
             this->endkey = 0;
             this->beginkey = 0;
@@ -24,19 +29,21 @@ class Grammar {
         int disable();
         int enable_all_rules();
         int disable_all_rules();
-        int enable_rule(std::string rule);
-        int disable_rule(std::string rule);
-        int load(void *data, uint32_t size);
+        int enable_rule(const std::string &rule);
+        int disable_rule(const std::string &rule);
+        int load();
         int unload();
+
+        GrammarState state;
+        std::set<std::string> exclusive_rules;
+
         std::string error;
 
         uintptr_t key;
         std::string name;
-        std::list<std::string> top_level_rules;
-        std::set<std::string> active_rules;
         drg_grammar *handle;
 
-        bool enabled, exclusive;
+        bool enabled;
         int priority;
         std::string appname;
         unsigned int endkey, beginkey, hypokey;

@@ -1,5 +1,6 @@
 #include <sstream>
 #include <vector>
+#include <memory>
 
 #include <bson.h>
 #include <stdarg.h>
@@ -54,6 +55,15 @@ void draconity_logf(const char *fmt, ...) {
     delete str;
 }
 
+/* Copy a byte array into a vector */
+static std::vector<uint8_t> make_blob(const uint8_t *buffer, uint32_t length) {
+    std::vector<uint8_t> result;
+    for (uint32_t i = 0; i < length; ++i) {
+        result.push_back(buffer[i]);
+    }
+    return result;
+}
+
 static bson_t *success_msg() {
     return BCON_NEW("success", BCON_BOOL(true));
 }
@@ -62,14 +72,13 @@ static bson_t *handle_message(const std::vector<uint8_t> &msg) {
     std::ostringstream errstream;
     std::string errmsg = "";
 
-    std::shared_ptr<Grammar> grammar = nullptr;
-    char *cmd = NULL, *name = NULL, *list = NULL, *main_rule = NULL;
-    bool enabled = false, exclusive = false;
+    char *cmd = NULL, *name = NULL;
+    bool exclusive = false;
     int priority = 0, counter;
-    bool has_enabled = false, has_exclusive = false, has_priority = false;
+    bool has_exclusive = false, has_priority = false, has_lists = false;
 
-    const uint8_t *items_buf = NULL, *data_buf = NULL, *phrase_buf = NULL, *words_buf;
-    uint32_t items_len = 0, data_len = 0, phrase_len = 0, words_len;
+    const uint8_t *data_buf = NULL, *phrase_buf = NULL, *words_buf, *active_rules_buf = NULL, *lists_buf = NULL;
+    uint32_t data_len = 0, phrase_len = 0, words_len, active_rules_len = 0, lists_len = 0;
 
     bson_t *resp = NULL;
     bson_t root;
@@ -85,21 +94,17 @@ static bson_t *handle_message(const std::vector<uint8_t> &msg) {
                 cmd = bson_iter_dup_utf8(&iter, NULL);
             } else if (streq(key, "name") && BSON_ITER_HOLDS_UTF8(&iter)) {
                 name = bson_iter_dup_utf8(&iter, NULL);
-            } else if (streq(key, "main_rule") && BSON_ITER_HOLDS_UTF8(&iter)) {
-                main_rule = bson_iter_dup_utf8(&iter, NULL);
-            } else if (streq(key, "list") && BSON_ITER_HOLDS_UTF8(&iter)) {
-                list = bson_iter_dup_utf8(&iter, NULL);
-            } else if (streq(key, "enabled") && BSON_ITER_HOLDS_BOOL(&iter)) {
-                enabled = bson_iter_bool(&iter);
-                has_enabled = true;
             } else if (streq(key, "exclusive") && BSON_ITER_HOLDS_BOOL(&iter)) {
                 exclusive = bson_iter_bool(&iter);
                 has_exclusive = true;
             } else if (streq(key, "priority") && BSON_ITER_HOLDS_INT32(&iter)) {
                 priority = bson_iter_int32(&iter);
                 has_priority = true;
-            } else if (streq(key, "items") && BSON_ITER_HOLDS_ARRAY(&iter)) {
-                bson_iter_array(&iter, &items_len, &items_buf);
+            } else if (streq(key, "active_rules") && BSON_ITER_HOLDS_ARRAY(&iter)) {
+                bson_iter_array(&iter, &active_rules_len, &active_rules_buf);
+            } else if (streq(key, "lists") && BSON_ITER_HOLDS_DOCUMENT(&iter)) {
+                bson_iter_document(&iter, &lists_len, &lists_buf);
+                has_lists = true;
             } else if (streq(key, "phrase") && BSON_ITER_HOLDS_ARRAY(&iter)) {
                 bson_iter_array(&iter, &phrase_len, &phrase_buf);
             } else if (streq(key, "words") && BSON_ITER_HOLDS_ARRAY(&iter)) {
@@ -111,8 +116,6 @@ static bson_t *handle_message(const std::vector<uint8_t> &msg) {
             }
         }
     }
-    if (name)
-        grammar = draconity->grammars[name];
     if (!cmd) {
         errmsg = "missing or broken cmd field";
         goto end;
@@ -221,182 +224,92 @@ static bson_t *handle_message(const std::vector<uint8_t> &msg) {
     } else if (streq(cmd, "ready")) {
         draconity_ready();
         resp = success_msg();
-    } else if (cmd[0] == 'g') {
-        if (streq(cmd, "g.update")) {
-            if (!draconity->ready) goto not_ready;
-            if (streq(name, "dragon")) {
-                errmsg = draconity->set_dragon_enabled(has_enabled && enabled);
-                if (errmsg.size() == 0) resp = success_msg();
-                goto end;
-            }
-            if (!grammar) goto no_grammar;
+    } else if (streq(cmd, "g.set")) {
+        // TODO: If not ready, shouldn't we just push the update anyway?
+        if (!draconity->ready) goto not_ready;
+        // TODO: Handle missing `data` field?
 
-            if (has_enabled && enabled != grammar->enabled) {
-                int rc = 0;
-                // Rule enabling has been separated. Handle the grammar first,
-                // then the rules.
-                if (enabled) {
-                    rc = grammar->enable();
-                } else {
-                    rc = grammar->disable();
-                }
-                if (rc) {
-                    errmsg = grammar->error;
-                    goto end;
-                }
-                // Now handle the rules.
-                if (enabled) {
-                    rc = grammar->enable_all_rules();
-                } else {
-                    rc = grammar->disable_all_rules();
-                }
-                if (rc) {
-                    errmsg = grammar->error;
-                    goto end;
-                }
-            }
-            if (has_exclusive && exclusive != grammar->exclusive) {
-                int rc = _DSXGrammar_SetSpecialGrammar(grammar->handle, exclusive);
-                if (rc) {
-                    errstream << "error setting exclusive grammar: " << rc;
-                    errmsg = errstream.str();
-                    goto end;
-                }
-                grammar->exclusive = exclusive;
-            }
-            if (has_priority && priority != grammar->priority) {
-                int rc = _DSXGrammar_SetPriority(grammar->handle, priority);
-                if (rc) {
-                    errstream << "error setting priority: " << rc;
-                    errmsg = errstream.str();
-                    goto end;
-                }
-                grammar->priority = priority;
-            }
-            resp = success_msg();
-        } else if (streq(cmd, "g.listset")) {
-            if (!draconity->ready) goto not_ready;
-            if (!grammar) goto no_grammar;
-            if (!list) {
-                errmsg = "missing or broken list name";
-                goto end;
-            }
-            if (!items_buf || !items_len) {
-                errmsg = "missing or broken items array";
-                goto end;
-            }
-            dsx_dataptr dp = {.data = NULL, .size = 0};
-            if (!bson_iter_init_from_data(&iter, items_buf, items_len)) {
-                errmsg = "list item iter failed";
-                goto end;
-            }
-            // get size of the new list's data block
-            while (bson_iter_next(&iter)) {
-                if (!BSON_ITER_HOLDS_UTF8(&iter)) {
-                    errmsg = "list contains non-string value";
-                    goto end;
-                }
-                uint32_t length = 0;
-                bson_iter_utf8(&iter, &length);
-                dp.size += sizeof(dsx_id) + align4(length);
-            }
-            dp.data = calloc(1, dp.size);
-            uint8_t *pos = (uint8_t *)dp.data;
-            if (!bson_iter_init_from_data(&iter, items_buf, items_len)) {
-                errmsg = "list item iter failed";
-                goto end;
-            }
-            while (bson_iter_next(&iter)) {
-                dsx_id *ent = (dsx_id *)pos;
-                uint32_t length = 0;
-                const char *word = bson_iter_utf8(&iter, &length);
-                ent->size = sizeof(dsx_id) + align4(length);
-                memcpy(ent->name, word, length);
-                pos += ent->size;
-            }
-            draconity->dragon_lock.lock();
-            int ret = _DSXGrammar_SetList(grammar->handle, list, &dp);
-            draconity->dragon_lock.unlock();
-            if (ret) {
-                errmsg = "error setting list";
-                goto end;
-            }
-            resp = success_msg();
-            free(dp.data);
-        } else if (streq(cmd, "g.unload")) {
-            if (!draconity->ready) goto not_ready;
-            if (!grammar) goto no_grammar;
-            int rc = grammar->unload();
-            if (rc) {
-                errstream << "error unloading grammar: " << rc;
-                errmsg = errstream.str();
-                goto end;
-            }
-            resp = success_msg();
-        } else if (streq(cmd, "g.load")) {
-            if (!draconity->ready) goto not_ready;
-            if (streq(name, "dragon")) {
-                errmsg = "'dragon' grammar name is reserved";
-                goto end;
-            }
-            if (!data_buf || !data_len) {
-                errmsg = "missing or broken data field";
-                goto end;
-            }
-            if (!main_rule) {
-                errmsg = "missing main_rule";
-                goto end;
-            }
-            if (grammar) {
-                draconity_logf("warning: reloading \"%s\"", name);
-                int rc = grammar->unload();
-                if (rc) {
-                    errstream << "error unloading grammar: " << rc;
-                    errmsg = errstream.str();
-                    goto end;
-                }
-            }
-            // HACK: Stopgap so we can still expose the same API. Need to figure
-            // out how to expose rule enabling.
-            std::list<std::string> rules = {main_rule};
-            grammar = std::make_shared<Grammar>(name, rules);
-            int ret = grammar->load((void *)data_buf, data_len);
-            if (ret) {
-                errmsg = grammar->error;
-                goto end;
-            }
-            draconity->keylock.lock();
-            draconity->grammars[grammar->name] = grammar;
-            // keys are used to associate grammar objects with callbacks
-            // in a way that allows us to free the grammar objects without crashing if a callback was in flight
-            // once freed, keys can be reused after 30 seconds, or if the global serial has increased by at least 3
-            // (to prevent both callback confusion and key explosion)
-            int64_t now = bson_get_monotonic_time();
-            reusekey *key_to_reuse = NULL;
-            // Search all free keys for one that's reusable.
-            for (reusekey *free_key : draconity->gkfree) {
-                if (now - free_key->ts > 30 * SEC || free_key->serial + 3 <= draconity->serial) {
-                    // This key is reusable. Store it and jump to the next step.
-                    key_to_reuse = free_key;
-                    break;
-                }
-            }
-            if (key_to_reuse != NULL) {
-                grammar->key = key_to_reuse->key;
-                // This key is no longer free.
-                draconity->gkfree.remove(key_to_reuse);
-                draconity->gkeys[grammar->key] = grammar;
-            } else {
-                grammar->key = draconity->gkeys.size();
-                // TODO: This is probably not correct. Doesn't match the original C.
-                draconity->gkeys[grammar->key] = grammar;
-            }
-            draconity->keylock.unlock();
-            // printf("%d\n", _DSXGrammar_SetApplicationName(grammar->handle, grammar->name));
-            resp = success_msg();
-        } else {
-            goto unsupported_command;
+
+        // Decode name
+        if (!name) {
+            errmsg = "no name";
+            goto end;
         }
+        std::string name_str(name);
+
+        // Decode "rules"
+        std::set<std::string> active_rules;
+        if (!active_rules_buf || !active_rules_len) {
+            errmsg = "missing or broken active_rules field";
+            goto end;
+        }
+        bson_iter_t rules_iter;
+        if (!bson_iter_init_from_data(&rules_iter, active_rules_buf, active_rules_len)) {
+            errmsg = "active_rules iter failed";
+            goto end;
+        }
+        while (bson_iter_next(&rules_iter)) {
+            if (!BSON_ITER_HOLDS_UTF8(&rules_iter)) {
+                errmsg = "active_rules array contained non-string element";
+                goto end;
+            }
+            const char *rule_c_str = bson_iter_utf8(&rules_iter, NULL);
+            std::string rule(rule_c_str);
+            active_rules.insert(rule);
+        }
+
+        // Decode "lists"
+        std::unordered_map<std::string, std::set<std::string>> lists;
+        if (has_lists) {
+            if (!lists_buf || !lists_len) {
+                errmsg = "missing or broken lists field";
+                goto end;
+            }
+            bson_iter_t lists_iter;
+            if (!bson_iter_init_from_data(&lists_iter, lists_buf, lists_len)) {
+                errmsg = "lists iter failed";
+                goto end;
+            }
+            while (bson_iter_next(&lists_iter)) {
+                std::string list_name = bson_iter_key(&lists_iter);
+                bson_iter_t this_list_iter;
+                if (!BSON_ITER_HOLDS_ARRAY(&lists_iter)) {
+                    errstream << "value field for list \"" << list_name << "\" contains non-array value";
+                    errmsg = errstream.str();
+                    goto end;
+                }
+                if (!bson_iter_recurse(&lists_iter, &this_list_iter)) {
+                    errstream << "error recursing into list " << list_name;
+                    errmsg = errstream.str();
+                    goto end;
+                }
+                std::set<std::string> list_contents;
+                // Pull each element out of the list, into a vector.
+                while (bson_iter_next(&this_list_iter)) {
+                    if (!BSON_ITER_HOLDS_UTF8(&this_list_iter)) {
+                        errstream << "an element in list \"" << list_name << "\" is not a string";
+                        errmsg = errstream.str();
+                        goto end;
+                    }
+                    std::string element_str = bson_iter_utf8(&this_list_iter, NULL);
+                    list_contents.insert(element_str);
+                }
+                lists[list_name] = std::move(list_contents);
+            }
+        }
+
+        GrammarState shadow_grammar;
+        // TODO: Does this copy?
+        shadow_grammar.blob = make_blob(data_buf, data_len);
+        shadow_grammar.lists = std::move(lists);
+        shadow_grammar.unload = false;
+
+        draconity->dragon_lock.lock();
+        draconity->shadow_grammars[name_str] = std::move(shadow_grammar);
+        draconity->dragon_lock.unlock();
+
+        resp = success_msg();
+        goto end;
     // diagnostic commands
     } else if (streq(cmd, "status")) {
         bson_t grammars, child;
@@ -410,6 +323,7 @@ static bson_t *handle_message(const std::vector<uint8_t> &msg) {
         BSON_APPEND_ARRAY_BEGIN(doc, "grammars", &grammars);
         // Iterate over an index and the current grammar
         int i = 0;
+        // TODO: Restructure with updated grammar objects
         for (const auto& pair : draconity->grammars) {
             auto grammar = pair.second;
             bson_uint32_to_string(i, &key, keystr, sizeof(keystr));
@@ -417,7 +331,6 @@ static bson_t *handle_message(const std::vector<uint8_t> &msg) {
             BSON_APPEND_UTF8(&child, "name", grammar->name.c_str());
             BSON_APPEND_BOOL(&child, "enabled", grammar->enabled);
             BSON_APPEND_INT32(&child, "priority", grammar->priority);
-            BSON_APPEND_BOOL(&child, "exclusive", grammar->exclusive);
             bson_append_document_end(&grammars, &child);
             i++;
         }
@@ -497,8 +410,6 @@ static bson_t *handle_message(const std::vector<uint8_t> &msg) {
 end:
     free(cmd);
     free(name);
-    free(main_rule);
-    free(list);
 
     pub = bson_new();
     BSON_APPEND_BOOL(pub, "success", errmsg.size() == 0);
@@ -518,10 +429,6 @@ end:
         draconity_publish("cmd", pub);
     }
     return resp;
-
-no_grammar:
-    errmsg = "grammar not found";
-    goto end;
 
 not_ready:
     errmsg = "engine not ready";
@@ -604,9 +511,7 @@ void draconity_paused(int key, dsx_paused *paused) {
 
 int draconity_phrase_begin(void *key, void *data) {
     // TODO: atomics? portability?
-    draconity->keylock.lock();
-    draconity->serial++;
-    draconity->keylock.unlock();
+    // TODO: Publish global phrase_begin
     return 0;
 }
 

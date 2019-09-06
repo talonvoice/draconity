@@ -65,7 +65,9 @@ extern "C" int phrase_publish(void *key, dsx_end_phrase *endphrase, const char *
     bool ours = (endphrase->flags & 2) == 2;
     bson_t obj = BSON_INITIALIZER;
 
-    std::string name = draconity->gkey_to_name((uintptr_t)key);
+    // TODO: Get & return name
+    // std::string name = draconity->gkey_to_name((uintptr_t)key);
+    std::string name = "dummy_name";
     if (name.size() == 0) goto end;
 
     BSON_APPEND_UTF8(&obj, "cmd", cmd);
@@ -93,8 +95,10 @@ extern "C" int phrase_hypothesis(void *key, dsx_end_phrase *endphrase) {
     return phrase_publish(key, endphrase, "p.hypothesis", true);
 }
 
+// TODO: Remove this. Just have a global callback.
 extern "C" int phrase_begin(void *key, void *data) {
-    std::string name = draconity->gkey_to_name((uintptr_t)key);
+    // std::string name = draconity->gkey_to_name((uintptr_t)key);
+    std::string name = "dummy_name";
     if (name.size() == 0) return 0;
     draconity_publish("phrase", BCON_NEW("cmd", BCON_UTF8("p.begin"), "grammar", BCON_UTF8(name.c_str())));
     return 0;

@@ -18,8 +18,6 @@ Draconity *Draconity::shared() {
 Draconity::Draconity() {
     micstate = NULL;
     ready = false;
-    start_ts = 0;
-    serial = 0;
     dragon_enabled = false;
     mimic_success = false;
     engine = NULL;
@@ -47,16 +45,6 @@ Draconity::Draconity() {
         this->prevent_wake       = config->get_as<bool>("prevent_wake"      ).value_or(false);
     }
     printf("[+] draconity: loaded config from %s\n", config_path.c_str());
-}
-
-std::string Draconity::gkey_to_name(uintptr_t gkey) {
-    std::string ret;
-    this->keylock.lock();
-    auto it = this->gkeys.find(gkey);
-    if (it != this->gkeys.end())
-        ret = it->second->name;
-    this->keylock.unlock();
-    return ret;
 }
 
 std::string Draconity::set_dragon_enabled(bool enabled) {
