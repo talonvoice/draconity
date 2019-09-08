@@ -18,14 +18,15 @@ public:
     static Draconity *shared();
 
     std::string set_dragon_enabled(bool enabled);
+    void sync_state();
 private:
     Draconity();
     Draconity(const Draconity &);
     Draconity& operator=(const Draconity &);
 
 public:
-    std::map<std::string, std::shared_ptr<Grammar>> grammars;
-    std::map<std::string, GrammarState> shadow_grammars;
+    std::unordered_map<std::string, std::shared_ptr<Grammar>> grammars;
+    std::unordered_map<std::string, GrammarState> shadow_grammars;
 
     const char *micstate;
     bool ready;

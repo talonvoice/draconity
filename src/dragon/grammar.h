@@ -15,7 +15,9 @@ struct GrammarState {
 
 class Grammar {
     public:
-    Grammar() {
+    Grammar(std::string name) {
+            this->name = name;
+            this->errors = {};
             this->key = 0;
             this->handle = nullptr;
             this->enabled = false;
@@ -25,14 +27,9 @@ class Grammar {
             this->hypokey = 0;
         };
 
-        int enable();
-        int disable();
-        int enable_all_rules();
-        int disable_all_rules();
-        int enable_rule(const std::string &rule);
-        int disable_rule(const std::string &rule);
-        int load();
-        int unload();
+        void record_error(std::string type, std::string msg, int rc, std::string name);
+
+        std::list<std::unordered_map<std::string, std::string>> errors;
 
         GrammarState state;
         std::set<std::string> exclusive_rules;

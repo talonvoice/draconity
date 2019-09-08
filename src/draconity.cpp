@@ -4,6 +4,7 @@
 
 #include "draconity.h"
 #include "abstract_platform.h"
+#include "phrase.h"
 
 void draconity_install();
 static Draconity *instance = NULL;
@@ -72,4 +73,176 @@ std::string Draconity::set_dragon_enabled(bool enabled) {
     }
     this->dragon_lock.unlock();
     return "";
+}
+
+int unload_grammar(std::shared_ptr<Grammar> &grammar) {
+    int rc;
+    // Unregister callbacks before unloading.
+    if ((rc =_DSXGrammar_Unregister(grammar->handle, grammar->endkey))) {
+        printf("[!] error unregistering grammar: %d\n", rc);
+        return rc;
+    } else if ((rc = _DSXGrammar_Unregister(grammar->handle, grammar->hypokey))) {
+        printf("[!] error removing hypothesis cb: %d\n", rc);
+        return rc;
+    } else if ((rc = _DSXGrammar_Unregister(grammar->handle, grammar->beginkey))) {
+        printf("[!] error removing begin cb: %d\n", rc);
+        return rc;
+    } else if ((rc = _DSXGrammar_Destroy(grammar->handle))) {
+        printf("[!] error destroying grammar: %d\n", rc);
+        return rc;
+    }
+    grammar->state.active_rules.clear();
+    grammar->state.lists.clear();
+    grammar->state.blob = {};
+    grammar->state.unload = true;
+    grammar->enabled = false;
+    return 0;
+
+}
+
+int load_grammar(std::shared_ptr<Grammar> &grammar, std::vector<uint8_t> &blob) {
+    int rc;
+    void *grammar_key = (void *)grammar.get();
+    dsx_dataptr blob_dp = {.data = blob.data(),
+                           .size = blob.size()};
+    if ((rc = _DSXEngine_LoadGrammar(_engine, 1 /* cfg */, &blob_dp, &grammar->handle))) {
+        grammar->record_error("grammar", "error loading grammar", rc, grammar->name);
+        return rc;
+    }
+    grammar->state.blob = std::move(blob);
+
+    // Now register callbacks
+    if ((rc = _DSXGrammar_RegisterEndPhraseCallback(grammar->handle, phrase_end, grammar_key, &grammar->endkey))) {
+        grammar->record_error("grammar", "error registering end phrase callback", rc, grammar->name);
+        return rc;
+    }
+    if ((rc = _DSXGrammar_RegisterPhraseHypothesisCallback(grammar->handle, phrase_hypothesis, grammar_key, &grammar->hypokey))) {
+        grammar->record_error("grammar", "error registering phrase hypothesis callback", rc, grammar->name);
+        return rc;
+    }
+    if ((rc = _DSXGrammar_RegisterBeginPhraseCallback(grammar->handle, phrase_begin, grammar_key, &grammar->beginkey))) {
+        grammar->record_error("grammar", "error registering begin phrase callback", rc, grammar->name);
+        return rc;
+    }
+    grammar->enabled = true;
+    return 0;
+}
+
+void activate_rule(std::shared_ptr<Grammar> &grammar, std::string &rule) {
+    int rc = _DSXGrammar_Activate(grammar->handle, 0, false, rule.c_str());
+    if (rc) {
+        grammar->record_error("rule", "error activating rule", rc, rule);
+        return;
+    }
+    grammar->state.active_rules.insert(rule);
+}
+
+void deactivate_rule(std::shared_ptr<Grammar> &grammar, std::string &rule) {
+    int rc = _DSXGrammar_Deactivate(grammar->handle, 0, rule.c_str());
+    if (rc) {
+        grammar->record_error("rule", "error deactivating rule", rc, rule);
+        return;
+    }
+    grammar->state.active_rules.erase(rule);
+}
+
+void sync_rules(std::shared_ptr<Grammar> &grammar, GrammarState &shadow_state) {
+    std::set<std::string> rules_to_enable = {};
+    std::set<std::string> rules_to_disable = {};
+
+    std::set<std::string> &shadow_rules = shadow_state.active_rules;
+    std::set<std::string> &live_rules = grammar->state.active_rules;
+    // Get rules to enable
+    std::set_difference(shadow_rules.begin(), shadow_rules.end(),
+                        live_rules.begin(), live_rules.end(),
+                        std::inserter(rules_to_enable, rules_to_enable.end()));
+    // Get rules to disable
+    std::set_difference(live_rules.begin(), live_rules.end(),
+                        shadow_rules.begin(), shadow_rules.end(),
+                        std::inserter(rules_to_disable, rules_to_disable.end()));
+
+    for (auto rule : rules_to_enable) {
+        activate_rule(grammar, rule);
+    }
+    for (auto rule : rules_to_disable) {
+        deactivate_rule(grammar, rule);
+    }
+}
+
+void sync_lists(std::shared_ptr<Grammar> &grammar, GrammarState &shadow_state) {
+    // TODO: List sync
+    printf("[!] WARNING: List synchronisation just stubbed for now.\n");
+}
+
+void sync_grammar(std::shared_ptr<Grammar> &grammar, GrammarState &shadow_state) {
+    // This is where we'll accumulate errors to send to the client if things go
+    // wrong - start with clean slate.
+    grammar->errors.clear();
+
+    if (grammar->state.blob != shadow_state.blob) {
+        if (grammar->enabled) {
+            // To replace an active blob, we have to reload the whole grammar.
+            unload_grammar(grammar);
+        }
+        if (load_grammar(grammar, shadow_state.blob)) {
+            // If the grammar failed to load, don't bother loading rules.
+            return;
+        }
+    }
+
+    if (grammar->state.active_rules != shadow_state.active_rules) {
+        sync_rules(grammar, shadow_state);
+    }
+    if (grammar->state.lists != shadow_state.lists) {
+        sync_lists(grammar, shadow_state);
+    }
+    // TODO: Sync exclusivity
+}
+
+/* Send the result of a g.set operation to the client. */
+void publish_gset_response(std::string &name, std::shared_ptr<Grammar> &grammar) {
+    // TODO: gset response.
+    printf("[!] WARNING: g.set response publishing not implemented yet.\n");
+    if (grammar->errors.empty()) {
+        printf("[+] grammar loaded without errors\n");
+    } else {
+        printf("[+] gset errors occurred\n");
+    }
+}
+
+/* Push the shadow state into Dragon - make it live. */
+void Draconity::sync_state() {
+    this->dragon_lock.lock();
+    for (auto &pair : this->shadow_grammars) {
+        std::string name = pair.first;
+        auto &shadow_state = pair.second;
+        auto grammar_it = this->grammars.find(name);
+        std::shared_ptr<Grammar> grammar;
+
+        if (grammar_it == this->grammars.end()) {
+            // We need to have a Grammar object to synchronize on.
+            grammar = std::make_shared<Grammar>(name);
+            this->grammars[name] = grammar;
+        } else {
+            grammar = grammar_it->second;
+        }
+
+        sync_grammar(grammar, shadow_state);
+
+        if (!grammar->errors.empty()) {
+            // If any errors occurred, we unload the entire grammar and wait for
+            // the user to fix it.
+            if (grammar->enabled) {
+                unload_grammar(grammar);
+            }
+            draconity->grammars.erase(name);
+        }
+
+        publish_gset_response(name, grammar);
+        grammar->errors.clear();
+    }
+    // Wipe the shadow grammars every time we sync them. Only un-synced states
+    // should be in the shadow.
+    this->shadow_grammars.clear();
+    this->dragon_lock.unlock();
 }
