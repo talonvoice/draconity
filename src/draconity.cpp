@@ -6,6 +6,9 @@
 #include "abstract_platform.h"
 #include "phrase.h"
 
+
+#define align4(len) ((len + 4) & ~3)
+
 void draconity_install();
 static Draconity *instance = NULL;
 Draconity *Draconity::shared() {
@@ -169,9 +172,42 @@ void sync_rules(std::shared_ptr<Grammar> &grammar, GrammarState &shadow_state) {
     }
 }
 
+void set_list(std::shared_ptr<Grammar> &grammar, const std::string &name, std::set<std::string> &list) {
+    // List has to be passed as a dsx_dataptr - we need to construct one.
+    dsx_dataptr dataptr = {.data = NULL, .size = 0};
+
+    // Establish the dataptr's size first.
+    for (auto &word : list) {
+        int length = strlen(word.c_str());
+        dataptr.size += sizeof(dsx_id) + align4(length);
+    }
+
+    // Now we have the size, allocate memory and populate it.
+    dataptr.data = calloc(1, dataptr.size);
+    uint8_t *pos = (uint8_t *)dataptr.data;
+    for (auto word : list) {
+        dsx_id *ent = (dsx_id *)pos;
+        const char *word_cstr = word.c_str();
+        uint32_t length = strlen(word_cstr);
+        ent->size = sizeof(dsx_id) + align4(length);
+        memcpy(ent->name, word_cstr, length);
+        pos += ent->size;
+    }
+
+    // Now we can pass the list to Dragon.
+    int rc = _DSXGrammar_SetList(grammar->handle, name.c_str(), &dataptr);
+    if (rc) {
+        grammar->record_error("list", "error setting list", rc, name);
+        return;
+    }
+    // Only set our grammar's list when Dragon's list was set successfully.
+    grammar->state.lists[name] = std::move(list);
+}
+
 void sync_lists(std::shared_ptr<Grammar> &grammar, GrammarState &shadow_state) {
-    // TODO: List sync
-    printf("[!] WARNING: List synchronisation just stubbed for now.\n");
+    for (auto &list_pair : shadow_state.lists) {
+        set_list(grammar, list_pair.first, list_pair.second);
+    }
 }
 
 void sync_grammar(std::shared_ptr<Grammar> &grammar, GrammarState &shadow_state) {

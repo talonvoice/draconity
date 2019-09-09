@@ -15,8 +15,6 @@
 #include "server.h"
 #include "draconity.h"
 
-#define align4(len) ((len + 4) & ~3)
-
 #ifndef streq
 #define streq(a, b) !strcmp(a, b)
 #endif
