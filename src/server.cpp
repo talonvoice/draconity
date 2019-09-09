@@ -506,6 +506,9 @@ void draconity_mimic_done(int key, dsx_mimic *mimic) {
 }
 
 void draconity_paused(int key, dsx_paused *paused) {
+    if (draconity->ready) {
+        draconity->sync_state();
+    }
     _DSXEngine_Resume(_engine, paused->token);
 }
 
