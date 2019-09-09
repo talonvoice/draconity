@@ -301,6 +301,7 @@ static bson_t *handle_message(const std::vector<uint8_t> &msg) {
         GrammarState shadow_grammar;
         // TODO: Does this copy?
         shadow_grammar.blob = make_blob(data_buf, data_len);
+        shadow_grammar.active_rules = std::move(active_rules);
         shadow_grammar.lists = std::move(lists);
         shadow_grammar.unload = false;
 
