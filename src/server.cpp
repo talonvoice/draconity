@@ -23,16 +23,36 @@
 #define MS  (1000 * US)
 #define SEC (1000 * MS)
 
-void draconity_publish(const char *topic, bson_t *obj) {
+/* Prepare a response to be pubished */
+std::vector<uint8_t> prep_response(const char *topic, bson_t *obj) {
     BSON_APPEND_INT64(obj, "ts", bson_get_monotonic_time());
     BSON_APPEND_UTF8(obj, "topic", topic);
     uint32_t length = 0;
     uint8_t *buf = bson_destroy_with_steal(obj, true, &length);
+    std::vector<uint8_t> vec;
     if (length > 0) {
-        std::vector<uint8_t> vec(buf, buf + length);
-        draconity_transport_publish(std::move(vec));
+        vec = std::vector(buf, buf + length);
+    } else {
+        vec = {};
     }
     bson_free(buf);
+    return vec;
+}
+
+/* Publish a message to all clients */
+void draconity_publish(const char *topic, bson_t *obj) {
+    auto response = prep_response(topic, obj);
+    if (!response.empty()) {
+        draconity_transport_publish(std::move(response));
+    }
+}
+
+/* Publish a message to a single client */
+void draconity_publish_one(const char *topic, bson_t *obj, uint64_t client_id) {
+    auto response = prep_response(topic, obj);
+    if (!response.empty()) {
+        draconity_transport_publish_one(std::move(response), client_id);
+    }
 }
 
 void draconity_logf(const char *fmt, ...) {
@@ -66,7 +86,7 @@ static bson_t *success_msg() {
     return BCON_NEW("success", BCON_BOOL(true));
 }
 
-static bson_t *handle_message(const std::vector<uint8_t> &msg) {
+static bson_t *handle_message(uint64_t client_id, uint32_t tid, const std::vector<uint8_t> &msg) {
     std::ostringstream errstream;
     std::string errmsg = "";
 
@@ -302,6 +322,8 @@ static bson_t *handle_message(const std::vector<uint8_t> &msg) {
         shadow_grammar.active_rules = std::move(active_rules);
         shadow_grammar.lists = std::move(lists);
         shadow_grammar.unload = false;
+        shadow_grammar.tid = tid;
+        shadow_grammar.client_id = client_id;
 
         draconity->dragon_lock.lock();
         draconity->shadow_grammars[name_str] = std::move(shadow_grammar);

@@ -7,6 +7,7 @@
 extern void draconity_init();
 extern void draconity_ready();
 extern void draconity_publish(const char *topic, bson_t *msg);
+extern void draconity_publish_one(const char *topic, bson_t *obj, uint64_t client_id);
 extern void draconity_logf(const char *fmt, ...);
 
 // callbacks

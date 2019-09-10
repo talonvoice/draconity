@@ -1,10 +1,12 @@
 #include <sstream>
 #include <string>
 #include <stdio.h>
+#include <bson.h>
 
 #include "draconity.h"
 #include "abstract_platform.h"
 #include "phrase.h"
+#include "server.h"
 
 
 #define align4(len) ((len + 4) & ~3)
@@ -233,17 +235,45 @@ void sync_grammar(std::shared_ptr<Grammar> &grammar, GrammarState &shadow_state)
         sync_lists(grammar, shadow_state);
     }
     // TODO: Sync exclusivity
+    grammar->state.client_id = shadow_state.client_id;
+    grammar->state.tid = shadow_state.tid;
+}
+/* Append a list of grammar loading errors to a bson response */
+void bson_append_errors(bson_t *response,
+                        std::list<std::unordered_map<std::string, std::string>> &errors) {
+    bson_t bson_errors;
+    bson_t bson_error;
+    BSON_APPEND_ARRAY_BEGIN(response, "errors", &bson_errors);
+    char keystr[16];
+    const char *key;
+    int i = 0;
+    for (auto const &error : errors) {
+        bson_uint32_to_string(i++, &key, keystr, sizeof(keystr));
+        BSON_APPEND_DOCUMENT_BEGIN(&bson_errors, key, &bson_error);
+        for (auto const &pair : error) {
+            BSON_APPEND_UTF8(&bson_error, pair.first.c_str(), pair.second.c_str());
+        }
+        bson_append_document_end(&bson_errors, &bson_error);
+    }
+    bson_append_array_end(response, &bson_errors);
 }
 
-/* Send the result of a g.set operation to the client. */
-void publish_gset_response(std::string &name, std::shared_ptr<Grammar> &grammar) {
-    // TODO: gset response.
-    printf("[!] WARNING: g.set response publishing not implemented yet.\n");
-    if (grammar->errors.empty()) {
-        printf("[+] grammar loaded without errors\n");
-    } else {
-        printf("[+] gset errors occurred\n");
-    }
+/* Send the result of a g.set operation to the client.
+
+   `status` can be one of { "success", "error", "skipped" }.
+
+ */
+void publish_gset_response(const uint64_t client_id, const uint32_t tid,
+                           std::string &grammar_name,
+                           std::string &status,
+                           std::list<std::unordered_map<std::string, std::string>> &errors) {
+    bson_t *response = BCON_NEW(
+        "name", BCON_UTF8(grammar_name.c_str()),
+        "status", BCON_UTF8(status.c_str()),
+        "tid", BCON_INT32(tid)
+    );
+    bson_append_errors(response, errors);
+    draconity_publish_one("g.set", response, client_id);
 }
 
 /* Push the shadow state into Dragon - make it live. */
@@ -265,7 +295,11 @@ void Draconity::sync_state() {
 
         sync_grammar(grammar, shadow_state);
 
-        if (!grammar->errors.empty()) {
+        std::string status;
+        if (grammar->errors.empty()) {
+            status = "success";
+        } else {
+            status = "error";
             // If any errors occurred, we unload the entire grammar and wait for
             // the user to fix it.
             if (grammar->enabled) {
@@ -274,7 +308,8 @@ void Draconity::sync_state() {
             draconity->grammars.erase(name);
         }
 
-        publish_gset_response(name, grammar);
+        publish_gset_response(grammar->state.client_id, grammar->state.tid,
+                              name, status, grammar->errors);
         grammar->errors.clear();
     }
     // Wipe the shadow grammars every time we sync them. Only un-synced states

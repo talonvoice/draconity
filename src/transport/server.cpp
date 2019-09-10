@@ -24,6 +24,7 @@ public:
     void run();
 
     void publish(std::vector<uint8_t> msg);
+    int publish_one(std::vector<uint8_t> msg, uint64_t client_id);
     void invoke(std::function<void()> fn);
 
 private:
@@ -37,6 +38,7 @@ private:
     std::shared_ptr<uvw::Loop> loop;
     std::shared_ptr<uvw::AsyncHandle> async_invoke_handle;
     std::mutex lock; // protects access to `invoke_queue`
+    int64_t client_nonce;
 };
 
 UvServer::UvServer(transport_msg_fn callback, std::shared_ptr<cpptoml::table> config) {
@@ -52,6 +54,7 @@ UvServer::UvServer(transport_msg_fn callback, std::shared_ptr<cpptoml::table> co
         printf("[!] draconity transport: received error event for checking invoke queue!");
     });
 
+    this->client_nonce = 0;
     this->secret = config->get_as<std::string>("secret").value_or("");
     bool listening = false;
     // TODO: auth connections with secret?
@@ -117,7 +120,7 @@ void UvServer::listenTCP(std::string host, int port) {
         auto stream = srv.loop().resource<uvw::TCPHandle>();
         printf("[+] draconity transport: accepted TCP connection from peer %s\n", peername(stream->peer()).c_str());
 
-        auto client = std::make_shared<UvClient<uvw::TCPHandle>>(stream, handle_message_callback, this->secret);
+        auto client = std::make_shared<UvClient<uvw::TCPHandle>>(stream, handle_message_callback, this->secret, this->client_nonce++);
         auto baseClient = std::static_pointer_cast<UvClientBase>(client);
         stream->once<uvw::CloseEvent>([this, baseClient](auto &, auto &stream) {
             printf("[+] draconity transport: closing TCP connection to peer %s\n", peername(stream.peer()).c_str());
@@ -153,7 +156,7 @@ void UvServer::listenPipe(std::string path) {
         auto stream = srv.loop().resource<uvw::PipeHandle>();
         printf("[+] draconity transport: accepted pipe connection from peer %s\n", peername(stream->peer()).c_str());
 
-        auto client = std::make_shared<UvClient<uvw::PipeHandle>>(stream, handle_message_callback, this->secret);
+        auto client = std::make_shared<UvClient<uvw::PipeHandle>>(stream, handle_message_callback, this->secret, this->client_nonce++);
         auto baseClient = std::static_pointer_cast<UvClientBase>(client);
         stream->once<uvw::CloseEvent>([this, baseClient](auto &, auto &stream) {
             printf("[+] draconity transport: closing pipe connection to peer %s\n", peername(stream.peer()).c_str());
@@ -206,6 +209,23 @@ void UvServer::publish(std::vector<uint8_t> msg) {
     });
 }
 
+/* Publish the `msg` to a single client.
+
+   If the client no longer exists, does nothing and returns 1.
+
+ */
+int UvServer::publish_one(std::vector<uint8_t> msg, uint64_t client_id) {
+    // TODO: Store clients in a map for quicker id lookup?
+    for (auto const &client : clients) {
+        if (client->id == client_id) {
+            client->publish(std::move(msg));
+            return 0;
+        }
+    }
+    // Client doesn't exist (i.e. it's disconnected).
+    return 1;
+}
+
 void UvServer::drain_invoke_queue() {
     lock.lock();
     for (auto fn : invoke_queue) {
@@ -228,4 +248,9 @@ void draconity_transport_main(transport_msg_fn callback, std::shared_ptr<cpptoml
 void draconity_transport_publish(std::vector<uint8_t> data) {
     if (!server) return;
     server->publish(std::move(data));
+}
+
+void draconity_transport_publish_one(std::vector<uint8_t> data, uint64_t client_id) {
+    if (!server) return;
+    server->publish_one(std::move(data), client_id);
 }

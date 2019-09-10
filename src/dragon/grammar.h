@@ -11,6 +11,8 @@ struct GrammarState {
     std::set<std::string> active_rules;
     std::unordered_map<std::string, std::set<std::string>> lists;
     bool unload;
+    uint64_t client_id;  // Client that set this state
+    uint32_t tid;        // Transaction that set this state
 };
 
 class Grammar {
