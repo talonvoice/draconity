@@ -7,6 +7,7 @@
 #include "types.h"
 
 struct GrammarState {
+    public:
     std::vector<uint8_t> blob;
     std::set<std::string> active_rules;
     std::unordered_map<std::string, std::set<std::string>> lists;
