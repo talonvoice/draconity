@@ -245,8 +245,11 @@ static bson_t *handle_message(uint64_t client_id, uint32_t tid, const std::vecto
     } else if (streq(cmd, "g.set")) {
         // TODO: If not ready, shouldn't we just push the update anyway?
         if (!draconity->ready) goto not_ready;
-        // TODO: Handle missing `data` field?
 
+        GrammarState shadow_grammar;
+
+        // TODO: Handle missing `data` field?
+        shadow_grammar.blob = make_blob(data_buf, data_len);
 
         // Decode name
         if (!name) {
@@ -256,7 +259,6 @@ static bson_t *handle_message(uint64_t client_id, uint32_t tid, const std::vecto
         std::string name_str(name);
 
         // Decode "rules"
-        std::set<std::string> active_rules;
         if (!active_rules_buf || !active_rules_len) {
             errmsg = "missing or broken active_rules field";
             goto end;
@@ -273,11 +275,10 @@ static bson_t *handle_message(uint64_t client_id, uint32_t tid, const std::vecto
             }
             const char *rule_c_str = bson_iter_utf8(&rules_iter, NULL);
             std::string rule(rule_c_str);
-            active_rules.insert(rule);
+            shadow_grammar.active_rules.insert(rule);
         }
 
         // Decode "lists"
-        std::unordered_map<std::string, std::set<std::string>> lists;
         if (has_lists) {
             if (!lists_buf || !lists_len) {
                 errmsg = "missing or broken lists field";
@@ -312,15 +313,10 @@ static bson_t *handle_message(uint64_t client_id, uint32_t tid, const std::vecto
                     std::string element_str = bson_iter_utf8(&this_list_iter, NULL);
                     list_contents.insert(element_str);
                 }
-                lists[list_name] = std::move(list_contents);
+                shadow_grammar.lists[list_name] = std::move(list_contents);
             }
         }
-
-        GrammarState shadow_grammar;
         // TODO: Does this copy?
-        shadow_grammar.blob = make_blob(data_buf, data_len);
-        shadow_grammar.active_rules = std::move(active_rules);
-        shadow_grammar.lists = std::move(lists);
         shadow_grammar.unload = false;
         shadow_grammar.tid = tid;
         shadow_grammar.client_id = client_id;
