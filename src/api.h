@@ -36,7 +36,7 @@ DLAPI int (*_DSXEngine_SetBeginPhraseCallback)(drg_engine *engine, int (*cb)(voi
 DLAPI int (*_DSXEngine_SetEndPhraseCallback)(drg_engine *engine, void *cb, void *user, unsigned int *key);
 
 DLAPI int (*_DSXEngine_Pause)(drg_engine *engine);
-DLAPI int (*_DSXEngine_Resume)(drg_engine *engine, uintptr_t token);
+DLAPI int (*_DSXEngine_Resume)(drg_engine *engine, uint64_t token);
 DLAPI int (*_DSXEngine_ResumeRecognition)(drg_engine *engine);
 
 DLAPI int (*_DSXFileSystem_PreferenceSetValue)(drg_filesystem *fs, char *a, char *b, char *c, char *d);
