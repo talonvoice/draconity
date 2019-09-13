@@ -8,6 +8,7 @@ Tasks remaining.
 - [x] Fix long recognition hang when mic is first enabled.
 - [x] Enable JIT Pausing on Windows.
 - [ ] Pause until clients confirm their state on JIT Pause.
+- [ ] Single phrase begin callback (not per grammar)
 - [ ] Defer vocabulary modification (push word updates like grammars, only sync on pause).
 - [ ] Unloading grammars (`"g.unload"` API call).
 - [ ] Verify `"g.set"` API calls.
@@ -18,6 +19,7 @@ Tasks remaining.
 
 - [ ] Removal of native words (one-way)
 - [ ] Better support for pronunciation when adding words to the vocabulary.
+- [ ] Exclusive rules
 
 Please note, the bugs here are present on Dragon 13 - they haven't been
 confirmed on newer versions yet.
