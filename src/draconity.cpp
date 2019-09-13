@@ -278,7 +278,7 @@ void publish_gset_response(const uint64_t client_id, const uint32_t tid,
 
 /* Push the shadow state into Dragon - make it live. */
 void Draconity::sync_state() {
-    this->dragon_lock.lock();
+    this->shadow_lock.lock();
     for (auto &pair : this->shadow_grammars) {
         std::string name = pair.first;
         auto &shadow_state = pair.second;
@@ -315,5 +315,5 @@ void Draconity::sync_state() {
     // Wipe the shadow grammars every time we sync them. Only un-synced states
     // should be in the shadow.
     this->shadow_grammars.clear();
-    this->dragon_lock.unlock();
+    this->shadow_lock.unlock();
 }

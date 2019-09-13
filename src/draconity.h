@@ -33,6 +33,8 @@ public:
     uint64_t start_ts;
 
     std::list<ForeignRule *> dragon_rules;
+    // Locks the entire shadow state
+    std::mutex shadow_lock;
     std::mutex dragon_lock;
     bool dragon_enabled;
 

@@ -321,7 +321,7 @@ static bson_t *handle_message(uint64_t client_id, uint32_t tid, const std::vecto
         shadow_grammar.tid = tid;
         shadow_grammar.client_id = client_id;
 
-        draconity->dragon_lock.lock();
+        draconity->shadow_lock.lock();
         // When an existing update exists, we replace it and notify the client
         // that it's been skipped.
         auto skipped_it = draconity->shadow_grammars.find(name_str);
@@ -331,7 +331,7 @@ static bson_t *handle_message(uint64_t client_id, uint32_t tid, const std::vecto
             publish_gset_response(skipped.client_id, skipped.tid, name_str, "skipped", errors);
         }
         draconity->shadow_grammars[name_str] = std::move(shadow_grammar);
-        draconity->dragon_lock.unlock();
+        draconity->shadow_lock.unlock();
 
         resp = success_msg();
         goto end;
