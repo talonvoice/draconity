@@ -2,6 +2,8 @@
 
 Tasks remaining. 
 
+## Immediate
+
 - [ ] Fix crash when `_DSXResult_BestPathWord` is called on recognition.
 - [x] Fix long recognition hang when mic is first enabled.
 - [x] Enable JIT Pausing on Windows.
@@ -11,6 +13,11 @@ Tasks remaining.
 - [ ] Verify `"g.set"` API calls.
   - [ ] Unload grammar when `"g.set"` call is invalid.
 - [ ] In `phrase` callbacks, use actual grammar names.
+
+## Later
+
+- [ ] Removal of native words (one-way)
+- [ ] Better support for pronunciation when adding words to the vocabulary.
 
 Please note, the bugs here are present on Dragon 13 - they haven't been
 confirmed on newer versions yet.
