@@ -156,14 +156,14 @@ static bson_t *handle_message(uint64_t client_id, uint32_t tid, const std::vecto
             errmsg = "engine does not support vocabulary editing";
             goto end;
         }
-        bson_t *response = bson_new();
-        char keystr[16];
-        const char *index;
-        int i = 0;
-        bool all_good = true;
-        bson_t words;
-        BSON_APPEND_ARRAY_BEGIN(response, "words", &words);
         if (streq(cmd, "w.list")) {
+            const char *index;
+            bson_t *response = bson_new();
+            char keystr[16];
+            int i = 0;
+            bson_t words;
+            BSON_APPEND_ARRAY_BEGIN(response, "words", &words);
+            bool all_good = true;
             drg_worditer *wenum = _DSXEngine_EnumWords(_engine, 1);
             if (!wenum) {
                 bson_free(response);
@@ -196,49 +196,36 @@ static bson_t *handle_message(uint64_t client_id, uint32_t tid, const std::vecto
                 bson_free(response);
                 goto end;
             }
-        } else {
+            bson_append_array_end(response, &words);
+            BSON_APPEND_BOOL(response, "success", all_good);
+            resp = response;
+            goto end;
+        } else if (streq(cmd, "w.set")) {
+            std::set<std::string> shadow_words = {};
             if (!words_buf || !words_len) {
-                bson_free(response);
                 errmsg = "missing or broken words field";
                 goto end;
             }
             if (!bson_iter_init_from_data(&iter, words_buf, words_len)) {
-                bson_free(response);
                 errmsg = "word iter failed";
                 goto end;
             }
             while (bson_iter_next(&iter)) {
                 if (!BSON_ITER_HOLDS_UTF8(&iter)) {
-                    bson_free(response);
                     errmsg = "words contains non-string value";
                     goto end;
                 }
                 const char *word = bson_iter_utf8(&iter, NULL);
-                int result = 0;
-                if (streq(cmd, "w.add")) {
-                    drg_wordinfo info = {.flags=1, .num=1, .flags2=0x4000 /* temporary */, .flags3=0, .tag=0};
-                    drg_wordinfo *infoptr = &info;
-                    result = _DSXEngine_AddTemporaryWord(_engine, word, 1);
-                } else if (streq(cmd, "w.remove")) {
-                    result = _DSXEngine_DeleteWord(_engine, 1, word);
-                } else if (streq(cmd, "w.test")) {
-                    bool valid = false;
-                    result = _DSXEngine_ValidateWord(_engine, word, &valid);
-                    result = !(result == 0 && valid);
-                } else {
-                    bson_free(response);
-                    goto unsupported_command;
-                }
-                if (result != 0) {
-                    all_good = false;
-                    bson_uint32_to_string(i++, &index, keystr, sizeof(keystr));
-                    BSON_APPEND_UTF8(&words, index, word);
-                }
+                shadow_words.insert(word);
             }
+
+            draconity->set_shadow_words(client_id, tid, shadow_words);
+
+            resp = success_msg();
+            goto end;
+        } else {
+            goto unsupported_command;
         }
-        bson_append_array_end(response, &words);
-        BSON_APPEND_BOOL(response, "success", all_good);
-        resp = response;
     } else if (streq(cmd, "ready")) {
         draconity_ready();
         resp = success_msg();

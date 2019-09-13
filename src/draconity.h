@@ -13,12 +13,20 @@
 #include "dragon/grammar.h"
 #include "dragon/foreign_rule.h"
 
+/* Holds a desired state for the vocabulary. */
+struct WordState {
+    std::set<std::string> words;
+    int last_tid;
+    bool touched;
+};
+
 class Draconity {
 public:
     static Draconity *shared();
 
     std::string set_dragon_enabled(bool enabled);
     void sync_state();
+    void set_shadow_words(uint64_t client_id, uint32_t tid, std::set<std::string> &words);
 private:
     Draconity();
     Draconity(const Draconity &);
@@ -27,6 +35,9 @@ private:
 public:
     std::unordered_map<std::string, std::shared_ptr<Grammar>> grammars;
     std::unordered_map<std::string, GrammarState> shadow_grammars;
+
+    std::set<std::string> loaded_words;
+    std::unordered_map<uint64_t, WordState> shadow_words;
 
     const char *micstate;
     bool ready;

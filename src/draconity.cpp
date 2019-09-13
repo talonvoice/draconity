@@ -279,6 +279,7 @@ void publish_gset_response(const uint64_t client_id, const uint32_t tid,
 /* Push the shadow state into Dragon - make it live. */
 void Draconity::sync_state() {
     this->shadow_lock.lock();
+    // TODO: Sync words
     for (auto &pair : this->shadow_grammars) {
         std::string name = pair.first;
         auto &shadow_state = pair.second;
@@ -315,5 +316,26 @@ void Draconity::sync_state() {
     // Wipe the shadow grammars every time we sync them. Only un-synced states
     // should be in the shadow.
     this->shadow_grammars.clear();
+    this->shadow_lock.unlock();
+}
+
+
+void publish_wset_response(uint64_t client_id, uint32_t tid, std::string status) {
+    printf("[+] WARNING: w.set responses not implemented yet.");
+}
+
+// TODO: Move shadow grammar setting in here too.
+
+void Draconity::set_shadow_words(uint64_t client_id, uint32_t tid, std::set<std::string> &words) {
+    this->shadow_lock.lock();
+    auto existing_it = this->shadow_words.find(client_id);
+    if (existing_it != this->shadow_words.end()) {
+        publish_wset_response(client_id, existing_it->second.last_tid, "skipped");
+    }
+    WordState new_state;
+    new_state.touched = true;
+    new_state.last_tid = tid;
+    new_state.words = std::move(words);
+    this->shadow_words[client_id] = std::move(new_state);
     this->shadow_lock.unlock();
 }
