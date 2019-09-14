@@ -9,7 +9,7 @@ Tasks remaining.
 - [x] Enable JIT Pausing on Windows.
 - [ ] Pause until clients confirm their state on JIT Pause.
 - [ ] Single phrase begin callback (not per grammar)
-- [ ] Defer vocabulary modification (push word updates like grammars, only sync on pause).
+- [x] Defer vocabulary modification (push word updates like grammars, only sync on pause).
 - [ ] Unloading grammars (`"g.unload"` API call).
 - [ ] Verify `"g.set"` API calls.
   - [ ] Unload grammar when `"g.set"` call is invalid.
