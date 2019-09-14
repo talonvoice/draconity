@@ -448,8 +448,6 @@ void Draconity::sync_state() {
     this->shadow_lock.unlock();
 }
 
-// TODO: Move shadow grammar setting in here too.
-
 void Draconity::set_shadow_words(uint64_t client_id, uint32_t tid, std::set<std::string> &words) {
     this->shadow_lock.lock();
     auto existing_it = this->shadow_words.find(client_id);
