@@ -390,10 +390,20 @@ void Draconity::set_words(std::set<std::string> &new_words, std::list<std::unord
     }
 }
 
+/* Publish the result of a "w.set" command.
+
+   Operations are deferred. This is the result of the actual operation -
+   distinct from the result of the initial API call.
+
+ */
 void publish_wset_response(uint64_t client_id, uint32_t tid, std::string status,
                            std::list<std::unordered_map<std::string, std::string>> errors) {
-    printf("[+] WARNING: w.set responses not implemented yet.\n");
-    printf("[+] w.set status: \"%s\". Errors: %d\n", status.c_str(), errors.size());
+    bson_t *response = BCON_NEW(
+        "status", BCON_UTF8(status.c_str()),
+        "tid", BCON_INT32(tid)
+    );
+    bson_append_errors(response, errors);
+    draconity_publish_one("w.set", response, client_id);
 }
 
 void Draconity::handle_word_failures(std::list<std::unordered_map<std::string, std::string>> &errors) {
