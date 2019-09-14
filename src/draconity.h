@@ -17,7 +17,7 @@
 struct WordState {
     std::set<std::string> words;
     int last_tid;
-    bool touched;
+    bool synced;
 };
 
 class Draconity {
@@ -32,6 +32,11 @@ private:
     Draconity(const Draconity &);
     Draconity& operator=(const Draconity &);
 
+    void sync_words();
+    void sync_grammars();
+    void handle_word_failures(std::list<std::unordered_map<std::string, std::string>> &errors);
+    void set_words(std::set<std::string> &new_words,
+                   std::list<std::unordered_map<std::string, std::string>> &errors);
 public:
     std::unordered_map<std::string, std::shared_ptr<Grammar>> grammars;
     std::unordered_map<std::string, GrammarState> shadow_grammars;

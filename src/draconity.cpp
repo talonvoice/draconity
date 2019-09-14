@@ -276,10 +276,7 @@ void publish_gset_response(const uint64_t client_id, const uint32_t tid,
     draconity_publish_one("g.set", response, client_id);
 }
 
-/* Push the shadow state into Dragon - make it live. */
-void Draconity::sync_state() {
-    this->shadow_lock.lock();
-    // TODO: Sync words
+void Draconity::sync_grammars() {
     for (auto &pair : this->shadow_grammars) {
         std::string name = pair.first;
         auto &shadow_state = pair.second;
@@ -316,12 +313,139 @@ void Draconity::sync_state() {
     // Wipe the shadow grammars every time we sync them. Only un-synced states
     // should be in the shadow.
     this->shadow_grammars.clear();
-    this->shadow_lock.unlock();
 }
 
+/* Add an error to the "w.set" error list. */
+void record_word_error(std::string &word, std::string error_message,
+                    std::list<std::unordered_map<std::string, std::string>> &errors) {
+    std::unordered_map<std::string, std::string> error;
+    error["word"] = word;
+    error["message"] = error_message;
+    errors.push_back(std::move(error));
+}
 
-void publish_wset_response(uint64_t client_id, uint32_t tid, std::string status) {
-    printf("[+] WARNING: w.set responses not implemented yet.");
+int add_word(std::string word, std::set<std::string> &loaded_words,
+             std::list<std::unordered_map<std::string, std::string>> &errors) {
+    std::stringstream errstream;
+    int rc;
+
+    bool valid = false;
+    const char *word_cstr = word.c_str();
+    rc = _DSXEngine_ValidateWord(_engine, word_cstr, &valid);
+    if (!valid) {
+        if (rc == 0) {
+            record_word_error(word, "error: invalid word", errors);
+            return 1;
+        } else {
+            // Some error occured while validating the word.
+            errstream << "error validating word. Return code: " << rc;
+            record_word_error(word, errstream.str(), errors);
+            return rc;
+        }
+    }
+    rc = _DSXEngine_AddTemporaryWord(_engine, word_cstr, 1);
+    if (rc) {
+        errstream << "error adding word. Return code: " << rc;
+        record_word_error(word, errstream.str(), errors);
+        return rc;
+    }
+    // Only store the word if it was loaded successfully.
+    loaded_words.insert(word);
+    return 0;
+}
+
+int remove_word(std::string word, std::set<std::string> &loaded_words,
+                std::list<std::unordered_map<std::string, std::string>> &errors) {
+    int rc = _DSXEngine_DeleteWord(_engine, 1, word.c_str());
+    if (rc) {
+        std::stringstream errstream;
+        errstream << "error deleting word. Return code: " << rc;
+        record_word_error(word, errstream.str(), errors);
+        return rc;
+    }
+    // Only remove the word if it was unloaded successfully.
+    loaded_words.erase(word);
+    return 0;
+}
+
+void Draconity::set_words(std::set<std::string> &new_words, std::list<std::unordered_map<std::string, std::string>> &errors) {
+    std::set<std::string> words_to_add = {};
+    std::set<std::string> words_to_remove = {};
+
+    // Get words to add
+    std::set_difference(new_words.begin(), new_words.end(),
+                        this->loaded_words.begin(), this->loaded_words.end(),
+                        std::inserter(words_to_add, words_to_add.end()));
+    // Get words to remove
+    std::set_difference(this->loaded_words.begin(), this->loaded_words.end(),
+                        new_words.begin(), new_words.end(),
+                        std::inserter(words_to_remove, words_to_remove.end()));
+    for (auto word : words_to_add) {
+        printf("[+] Adding word: %s\n", word.c_str());
+        add_word(word, this->loaded_words, errors);
+    }
+    for (auto word : words_to_remove) {
+        printf("[+] Removing word: %s\n", word.c_str());
+        remove_word(word, this->loaded_words, errors);
+    }
+}
+
+void publish_wset_response(uint64_t client_id, uint32_t tid, std::string status,
+                           std::list<std::unordered_map<std::string, std::string>> errors) {
+    printf("[+] WARNING: w.set responses not implemented yet.\n");
+    printf("[+] w.set status: \"%s\". Errors: %d\n", status.c_str(), errors.size());
+}
+
+void Draconity::handle_word_failures(std::list<std::unordered_map<std::string, std::string>> &errors) {
+    // Deal with each client individually. Check which errors map to that
+    // client, process them, then move on to the next client.
+    for (auto &shadow_pair : this->shadow_words) {
+        uint64_t client_id = shadow_pair.first;
+        uint32_t tid = shadow_pair.second.last_tid;
+        auto &shadow_words = shadow_pair.second.words;
+
+        std::list<std::unordered_map<std::string, std::string>> client_errors;
+        for (auto &error : errors) {
+            std::string error_word = error["word"];
+            auto shadow_word_it = shadow_words.find(error_word);
+            if (shadow_word_it != shadow_words.end()) {
+                client_errors.push_back(error);
+                // We don't want this word to fail to load repeatedly, so remove
+                // it from the shadow state.
+                shadow_words.erase(error_word);
+            }
+        }
+        if (client_errors.size() == 0) {
+            publish_wset_response(client_id, tid, "success", client_errors);
+        } else {
+            publish_wset_response(client_id, tid, "error", client_errors);
+        }
+    }
+}
+
+void Draconity::sync_words() {
+    // Errors will be accumulated in this list per-word. Later, we'll work out
+    // which clients map to which error.
+    std::list<std::unordered_map<std::string, std::string>> errors;
+
+    std::set<std::string> all_shadow_words = {};
+    for (auto &state_pair : this->shadow_words) {
+        WordState &state = state_pair.second;
+        for (std::string word : state.words) {
+            all_shadow_words.insert(word);
+        }
+        state.synced = true;
+    }
+    this->set_words(all_shadow_words, errors);
+    this->handle_word_failures(errors);
+}
+
+/* Push the shadow state into Dragon - make it live. */
+void Draconity::sync_state() {
+    this->shadow_lock.lock();
+    this->sync_words();
+    this->sync_grammars();
+    this->shadow_lock.unlock();
 }
 
 // TODO: Move shadow grammar setting in here too.
@@ -329,12 +453,14 @@ void publish_wset_response(uint64_t client_id, uint32_t tid, std::string status)
 void Draconity::set_shadow_words(uint64_t client_id, uint32_t tid, std::set<std::string> &words) {
     this->shadow_lock.lock();
     auto existing_it = this->shadow_words.find(client_id);
-    if (existing_it != this->shadow_words.end()) {
-        publish_wset_response(client_id, existing_it->second.last_tid, "skipped");
+    if ((existing_it != this->shadow_words.end()) && !existing_it->second.synced) {
+        // An unsynced update exists. We need to tell the client it was skipped.
+        std::list<std::unordered_map<std::string, std::string>> no_errors = {};
+        publish_wset_response(client_id, existing_it->second.last_tid, "skipped", no_errors);
     }
     WordState new_state;
-    new_state.touched = true;
     new_state.last_tid = tid;
+    new_state.synced = false;
     new_state.words = std::move(words);
     this->shadow_words[client_id] = std::move(new_state);
     this->shadow_lock.unlock();
