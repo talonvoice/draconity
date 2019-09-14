@@ -80,6 +80,18 @@ std::string Draconity::set_dragon_enabled(bool enabled) {
     return "";
 }
 
+std::shared_ptr<Grammar> Draconity::get_grammar(uintptr_t key) {
+    for (auto &grammar_pair : this->grammars) {
+        // Grammar keys correspond to the grammar's position in memory,
+        // underneath the shared_ptr.
+        if (key == (uintptr_t)grammar_pair.second.get()) {
+            return grammar_pair.second;
+        }
+    }
+    // Grammar couldn't be found.
+    return NULL;
+}
+
 int unload_grammar(std::shared_ptr<Grammar> &grammar) {
     int rc;
     // Unregister callbacks before unloading.
