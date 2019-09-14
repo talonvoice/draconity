@@ -14,6 +14,7 @@ Tasks remaining.
 - [ ] Verify `"g.set"` API calls.
   - [ ] Unload grammar when `"g.set"` call is invalid.
 - [ ] In `phrase` callbacks, use actual grammar names.
+- [ ] Unload clients' state on disconnect
 
 ## Later
 
