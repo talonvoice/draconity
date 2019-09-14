@@ -26,6 +26,7 @@ public:
 
     std::string set_dragon_enabled(bool enabled);
     void sync_state();
+    void set_shadow_grammar(std::string &name, GrammarState &shadow_grammar);
     void set_shadow_words(uint64_t client_id, uint32_t tid, std::set<std::string> &words);
     std::shared_ptr<Grammar> get_grammar(uintptr_t key);
 private:
@@ -73,10 +74,6 @@ public:
 #define DLAPI extern
 #include "api.h"
 
-void publish_gset_response(const uint64_t client_id, const uint32_t tid,
-                           std::string &grammar_name,
-                           std::string status,
-                           std::list<std::unordered_map<std::string, std::string>> &errors);
 int draconity_set_param(const char *key, const char *value);
 void draconity_set_default_params();
 

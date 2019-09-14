@@ -470,6 +470,20 @@ void Draconity::sync_state() {
     this->shadow_lock.unlock();
 }
 
+void Draconity::set_shadow_grammar(std::string &name, GrammarState &shadow_grammar) {
+    this->shadow_lock.lock();
+    // When an existing update exists, we replace it and notify the client
+    // that it's been skipped.
+    auto skipped_it = this->shadow_grammars.find(name);
+    if (skipped_it != this->shadow_grammars.end()) {
+        GrammarState &skipped = skipped_it->second;
+        std::list<std::unordered_map<std::string, std::string>> no_errors = {};
+        publish_gset_response(skipped.client_id, skipped.tid, name, "skipped", no_errors);
+    }
+    this->shadow_grammars[name] = std::move(shadow_grammar);
+    this->shadow_lock.unlock();
+}
+
 void Draconity::set_shadow_words(uint64_t client_id, uint32_t tid, std::set<std::string> &words) {
     this->shadow_lock.lock();
     auto existing_it = this->shadow_words.find(client_id);
