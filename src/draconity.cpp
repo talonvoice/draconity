@@ -250,6 +250,7 @@ void sync_grammar(std::shared_ptr<Grammar> &grammar, GrammarState &shadow_state)
     grammar->state.client_id = shadow_state.client_id;
     grammar->state.tid = shadow_state.tid;
 }
+
 /* Append a list of grammar loading errors to a bson response */
 void bson_append_errors(bson_t *response,
                         std::list<std::unordered_map<std::string, std::string>> &errors) {
