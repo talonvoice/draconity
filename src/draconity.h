@@ -26,7 +26,7 @@ public:
 
     std::string set_dragon_enabled(bool enabled);
     void sync_state();
-    void set_shadow_grammar(std::string &name, GrammarState &shadow_grammar);
+    void set_shadow_grammar(std::string name, GrammarState &shadow_grammar);
     void set_shadow_words(uint64_t client_id, uint32_t tid, std::set<std::string> &words);
     std::shared_ptr<Grammar> get_grammar(uintptr_t key);
 private:
@@ -39,6 +39,7 @@ private:
     void handle_word_failures(std::list<std::unordered_map<std::string, std::string>> &errors);
     void set_words(std::set<std::string> &new_words,
                    std::list<std::unordered_map<std::string, std::string>> &errors);
+    void remove_grammar(std::string name, std::shared_ptr<Grammar> &grammar);
 public:
     std::unordered_map<std::string, std::shared_ptr<Grammar>> grammars;
     std::unordered_map<std::string, GrammarState> shadow_grammars;

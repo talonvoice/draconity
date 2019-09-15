@@ -229,87 +229,90 @@ static bson_t *handle_message(uint64_t client_id, uint32_t tid, const std::vecto
     } else if (streq(cmd, "ready")) {
         draconity_ready();
         resp = success_msg();
-    } else if (streq(cmd, "g.set")) {
+    } else if (cmd[0] == 'g') {
         // TODO: If not ready, shouldn't we just push the update anyway?
         if (!draconity->ready) goto not_ready;
 
         GrammarState shadow_grammar;
-
-        // TODO: Handle missing `data` field?
-        shadow_grammar.blob = make_blob(data_buf, data_len);
+        shadow_grammar.tid = tid;
+        shadow_grammar.client_id = client_id;
 
         // Decode name
         if (!name) {
             errmsg = "no name";
             goto end;
         }
-        std::string name_str(name);
 
-        // Decode "rules"
-        if (!active_rules_buf || !active_rules_len) {
-            errmsg = "missing or broken active_rules field";
-            goto end;
-        }
-        bson_iter_t rules_iter;
-        if (!bson_iter_init_from_data(&rules_iter, active_rules_buf, active_rules_len)) {
-            errmsg = "active_rules iter failed";
-            goto end;
-        }
-        while (bson_iter_next(&rules_iter)) {
-            if (!BSON_ITER_HOLDS_UTF8(&rules_iter)) {
-                errmsg = "active_rules array contained non-string element";
-                goto end;
-            }
-            const char *rule_c_str = bson_iter_utf8(&rules_iter, NULL);
-            std::string rule(rule_c_str);
-            shadow_grammar.active_rules.insert(rule);
-        }
+        if (streq(cmd, "g.set")) {
+            // TODO: Handle missing `data` field?
+            shadow_grammar.blob = make_blob(data_buf, data_len);
 
-        // Decode "lists"
-        if (has_lists) {
-            if (!lists_buf || !lists_len) {
-                errmsg = "missing or broken lists field";
+            // Decode "rules"
+            if (!active_rules_buf || !active_rules_len) {
+                errmsg = "missing or broken active_rules field";
                 goto end;
             }
-            bson_iter_t lists_iter;
-            if (!bson_iter_init_from_data(&lists_iter, lists_buf, lists_len)) {
-                errmsg = "lists iter failed";
+            bson_iter_t rules_iter;
+            if (!bson_iter_init_from_data(&rules_iter, active_rules_buf, active_rules_len)) {
+                errmsg = "active_rules iter failed";
                 goto end;
             }
-            while (bson_iter_next(&lists_iter)) {
-                std::string list_name = bson_iter_key(&lists_iter);
-                bson_iter_t this_list_iter;
-                if (!BSON_ITER_HOLDS_ARRAY(&lists_iter)) {
-                    errstream << "value field for list \"" << list_name << "\" contains non-array value";
-                    errmsg = errstream.str();
+            while (bson_iter_next(&rules_iter)) {
+                if (!BSON_ITER_HOLDS_UTF8(&rules_iter)) {
+                    errmsg = "active_rules array contained non-string element";
                     goto end;
                 }
-                if (!bson_iter_recurse(&lists_iter, &this_list_iter)) {
-                    errstream << "error recursing into list " << list_name;
-                    errmsg = errstream.str();
+                const char *rule = bson_iter_utf8(&rules_iter, NULL);
+                shadow_grammar.active_rules.insert(rule);
+            }
+
+            // Decode "lists"
+            if (has_lists) {
+                if (!lists_buf || !lists_len) {
+                    errmsg = "missing or broken lists field";
                     goto end;
                 }
-                std::set<std::string> list_contents;
-                // Pull each element out of the list, into a vector.
-                while (bson_iter_next(&this_list_iter)) {
-                    if (!BSON_ITER_HOLDS_UTF8(&this_list_iter)) {
-                        errstream << "an element in list \"" << list_name << "\" is not a string";
+                bson_iter_t lists_iter;
+                if (!bson_iter_init_from_data(&lists_iter, lists_buf, lists_len)) {
+                    errmsg = "lists iter failed";
+                    goto end;
+                }
+                while (bson_iter_next(&lists_iter)) {
+                    std::string list_name = bson_iter_key(&lists_iter);
+                    bson_iter_t this_list_iter;
+                    if (!BSON_ITER_HOLDS_ARRAY(&lists_iter)) {
+                        errstream << "value field for list \"" << list_name << "\" contains non-array value";
                         errmsg = errstream.str();
                         goto end;
                     }
-                    std::string element_str = bson_iter_utf8(&this_list_iter, NULL);
-                    list_contents.insert(element_str);
+                    if (!bson_iter_recurse(&lists_iter, &this_list_iter)) {
+                        errstream << "error recursing into list " << list_name;
+                        errmsg = errstream.str();
+                        goto end;
+                    }
+                    std::set<std::string> list_contents;
+                    // Pull each element out of the list, into a vector.
+                    while (bson_iter_next(&this_list_iter)) {
+                        if (!BSON_ITER_HOLDS_UTF8(&this_list_iter)) {
+                            errstream << "an element in list \"" << list_name << "\" is not a string";
+                            errmsg = errstream.str();
+                            goto end;
+                        }
+                        std::string element_str = bson_iter_utf8(&this_list_iter, NULL);
+                        list_contents.insert(element_str);
+                    }
+                    shadow_grammar.lists[list_name] = std::move(list_contents);
                 }
-                shadow_grammar.lists[list_name] = std::move(list_contents);
             }
+            shadow_grammar.unload = false;
+
+            draconity->set_shadow_grammar(name, shadow_grammar);
+        } else if (streq(cmd, "g.unload")) {
+            shadow_grammar.unload = true;
+            draconity->set_shadow_grammar(name, shadow_grammar);
+        } else {
+            goto unsupported_command;
         }
-        // TODO: Does this copy?
-        shadow_grammar.unload = false;
-        shadow_grammar.tid = tid;
-        shadow_grammar.client_id = client_id;
-
-        draconity->set_shadow_grammar(name_str, shadow_grammar);
-
         resp = success_msg();
         goto end;
     // diagnostic commands

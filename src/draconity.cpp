@@ -288,42 +288,58 @@ void publish_gset_response(const uint64_t client_id, const uint32_t tid,
     draconity_publish_one("g.set", response, client_id);
 }
 
+/* Unload & erase a live grammar. */
+void Draconity::remove_grammar(std::string name, std::shared_ptr<Grammar> &grammar) {
+    if (grammar->enabled) {
+        unload_grammar(grammar);
+    }
+    this->grammars.erase(name);
+}
+
 void Draconity::sync_grammars() {
     for (auto &pair : this->shadow_grammars) {
         std::string name = pair.first;
         auto &shadow_state = pair.second;
+
         auto grammar_it = this->grammars.find(name);
         std::shared_ptr<Grammar> grammar;
+        std::list<std::unordered_map<std::string, std::string>> errors;
+        std::string operation_status;
 
-        if (grammar_it == this->grammars.end()) {
-            // We need to have a Grammar object to synchronize on.
-            grammar = std::make_shared<Grammar>(name);
-            this->grammars[name] = grammar;
-        } else {
-            grammar = grammar_it->second;
-        }
-
-        sync_grammar(grammar, shadow_state);
-
-        std::string status;
-        if (grammar->errors.empty()) {
-            status = "success";
-        } else {
-            status = "error";
-            // If any errors occurred, we unload the entire grammar and wait for
-            // the user to fix it.
-            if (grammar->enabled) {
-                unload_grammar(grammar);
+        if (shadow_state.unload) {
+            // When a grammar is flagged to unload, that's all we need to do.
+            if (grammar_it != this->grammars.end()) {
+                this->remove_grammar(name, grammar_it->second);
             }
-            draconity->grammars.erase(name);
+            operation_status = "success";
+        } else {
+
+            if (grammar_it == this->grammars.end()) {
+                // We need to have a Grammar object to synchronize on.
+                grammar = std::make_shared<Grammar>(name);
+                this->grammars[name] = grammar;
+            } else {
+                grammar = grammar_it->second;
+            }
+
+            sync_grammar(grammar, shadow_state);
+
+            if (grammar->errors.empty()) {
+                operation_status = "success";
+            } else {
+                operation_status = "error";
+                // If any errors occurred, we unload the entire grammar and wait for
+                // the user to fix it.
+                this->remove_grammar(name, grammar);
+            }
+            errors = std::move(grammar->errors);
+            grammar->errors = {};
         }
 
-        publish_gset_response(grammar->state.client_id, grammar->state.tid,
-                              name, status, grammar->errors);
-        grammar->errors.clear();
+        publish_gset_response(shadow_state.client_id, shadow_state.tid,
+                              name, operation_status, errors);
     }
-    // Wipe the shadow grammars every time we sync them. Only un-synced states
-    // should be in the shadow.
+    // Only un-synced grammars should be in the shadow state.
     this->shadow_grammars.clear();
 }
 
@@ -470,7 +486,7 @@ void Draconity::sync_state() {
     this->shadow_lock.unlock();
 }
 
-void Draconity::set_shadow_grammar(std::string &name, GrammarState &shadow_grammar) {
+void Draconity::set_shadow_grammar(std::string name, GrammarState &shadow_grammar) {
     this->shadow_lock.lock();
     // When an existing update exists, we replace it and notify the client
     // that it's been skipped.
