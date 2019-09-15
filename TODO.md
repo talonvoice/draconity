@@ -10,7 +10,7 @@ Tasks remaining.
 - [ ] Pause until clients confirm their state on JIT Pause.
 - [ ] Single phrase begin callback (not per grammar)
 - [x] Defer vocabulary modification (push word updates like grammars, only sync on pause).
-- [ ] Unloading grammars (`"g.unload"` API call).
+- [x] Unloading grammars (`"g.unload"` API call).
 - [ ] Verify `"g.set"` API calls.
   - [ ] Unload grammar when `"g.set"` call is invalid.
 - [x] In `phrase` callbacks, use actual grammar names.
