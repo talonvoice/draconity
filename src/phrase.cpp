@@ -93,7 +93,6 @@ extern "C" int phrase_hypothesis(void *key, dsx_end_phrase *endphrase) {
     return phrase_publish(key, endphrase, "p.hypothesis", true);
 }
 
-// TODO: Remove this. Just have a global callback.
 extern "C" int phrase_begin(void *key, void *data) {
     std::shared_ptr<Grammar> grammar = draconity->get_grammar((uintptr_t)key);
     if (grammar == NULL) return 0;

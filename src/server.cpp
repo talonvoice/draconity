@@ -519,7 +519,6 @@ void draconity_paused(int key, dsx_paused *paused) {
 
 int draconity_phrase_begin(void *key, void *data) {
     // TODO: atomics? portability?
-    // TODO: Publish global phrase_begin
     return 0;
 }
 
