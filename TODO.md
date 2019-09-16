@@ -11,7 +11,6 @@ Tasks remaining.
 - [x] Defer vocabulary modification (push word updates like grammars, only sync on pause).
 - [x] Unloading grammars (`"g.unload"` API call).
 - [ ] Verify `"g.set"` API calls.
-  - [ ] Unload grammar when `"g.set"` call is invalid.
 - [x] In `phrase` callbacks, use actual grammar names.
 - [x] Unload clients' state on disconnect
 
@@ -20,6 +19,7 @@ Tasks remaining.
 - [ ] Removal of native words (one-way)
 - [ ] Better support for pronunciation when adding words to the vocabulary.
 - [ ] Exclusive rules
+- [ ] Unload grammar when `"g.set"` call is invalid.
 
 Please note, the bugs here are present on Dragon 13 - they haven't been
 confirmed on newer versions yet.
