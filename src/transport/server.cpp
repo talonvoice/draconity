@@ -14,6 +14,7 @@
 #include "transport.h"
 #include "transport/client.h"
 #include "transport/transport.h"
+#include "draconity.h"
 
 class UvServer {
 public:
@@ -124,6 +125,7 @@ void UvServer::listenTCP(std::string host, int port) {
         auto baseClient = std::static_pointer_cast<UvClientBase>(client);
         stream->once<uvw::CloseEvent>([this, baseClient](auto &, auto &stream) {
             printf("[+] draconity transport: closing TCP connection to peer %s\n", peername(stream.peer()).c_str());
+            draconity->clear_client_state(baseClient->id);
             clients.remove(baseClient);
         });
         stream->once<uvw::ErrorEvent>([client](auto &event, auto &stream) {

@@ -289,6 +289,35 @@ void publish_gset_response(const uint64_t client_id, const uint32_t tid,
     draconity_publish_one("g.set", response, client_id);
 }
 
+/* Empty the entire shadow state for a particular client.
+
+   Note: this method is designed to be used when the client has disconnected, so
+   it will invalidate all TIDs and won't send skips for existing shadows.
+
+ */
+void Draconity::clear_client_state(uint64_t client_id) {
+    this->shadow_lock.lock();
+    // Queue grammar unloads
+    for (auto &grammar_pair : this->grammars) {
+        std::string name = grammar_pair.first;
+        auto &grammar = grammar_pair.second;
+        if (grammar->state.client_id == client_id) {
+            GrammarState unload_state;
+            unload_state.unload = true;
+            unload_state.client_id = client_id;
+            this->shadow_grammars[name] = unload_state;
+        }
+    }
+    // Queue word unloads
+    auto words_it = this->shadow_words.find(client_id);
+    if (words_it != this->shadow_words.end()) {
+        WordState &word_state = words_it->second;
+        word_state.words.clear();
+        word_state.synced = false;
+    }
+    this->shadow_lock.unlock();
+}
+
 /* Unload & erase a live grammar. */
 void Draconity::remove_grammar(std::string name, std::shared_ptr<Grammar> &grammar) {
     if (grammar->enabled) {

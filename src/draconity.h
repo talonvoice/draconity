@@ -26,6 +26,7 @@ public:
 
     std::string set_dragon_enabled(bool enabled);
     void sync_state();
+    void clear_client_state(uint64_t client_id);
     void set_shadow_grammar(std::string name, GrammarState &shadow_grammar);
     void set_shadow_words(uint64_t client_id, uint32_t tid, std::set<std::string> &words);
     std::shared_ptr<Grammar> get_grammar(uintptr_t key);
