@@ -13,7 +13,7 @@ Tasks remaining.
 - [ ] Verify `"g.set"` API calls.
   - [ ] Unload grammar when `"g.set"` call is invalid.
 - [x] In `phrase` callbacks, use actual grammar names.
-- [ ] Unload clients' state on disconnect
+- [x] Unload clients' state on disconnect
 
 ## Later
 
