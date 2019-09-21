@@ -11,36 +11,9 @@
 #include <uvw.hpp>
 
 #include "abstract_platform.h"
-#include "transport.h"
-#include "transport/client.h"
 #include "transport/transport.h"
+#include "server.h"
 #include "draconity.h"
-
-class UvServer {
-public:
-    UvServer(transport_msg_fn callback, std::shared_ptr<cpptoml::table> config);
-    ~UvServer();
-    void listenTCP(std::string host, int port);
-    void listenPipe(std::string path);
-    void run();
-
-    void publish(std::vector<uint8_t> msg);
-    int publish_one(std::vector<uint8_t> msg, uint64_t client_id);
-    void invoke(std::function<void()> fn);
-
-private:
-    std::string secret;
-    void drain_invoke_queue();
-
-    transport_msg_fn handle_message_callback;
-    std::shared_ptr<cpptoml::table> config;
-    std::list<std::shared_ptr<UvClientBase>> clients;
-    std::list<std::function<void()>> invoke_queue;
-    std::shared_ptr<uvw::Loop> loop;
-    std::shared_ptr<uvw::AsyncHandle> async_invoke_handle;
-    std::mutex lock; // protects access to `invoke_queue`
-    int64_t client_nonce;
-};
 
 UvServer::UvServer(transport_msg_fn callback, std::shared_ptr<cpptoml::table> config) {
     this->config = config;
@@ -125,8 +98,8 @@ void UvServer::listenTCP(std::string host, int port) {
         auto baseClient = std::static_pointer_cast<UvClientBase>(client);
         stream->once<uvw::CloseEvent>([this, baseClient](auto &, auto &stream) {
             printf("[+] draconity transport: closing TCP connection to peer %s\n", peername(stream.peer()).c_str());
-            draconity->clear_client_state(baseClient->id);
             clients.remove(baseClient);
+            draconity->handle_disconnect(baseClient->id);
         });
         stream->once<uvw::ErrorEvent>([client](auto &event, auto &stream) {
             printf("[+] draconity transport: TCP error for peer %s: [%d] %s\n",
@@ -230,11 +203,14 @@ int UvServer::publish_one(std::vector<uint8_t> msg, uint64_t client_id) {
 
 void UvServer::drain_invoke_queue() {
     lock.lock();
-    for (auto fn : invoke_queue) {
-        fn();
-    }
+    // Execute the queue outside the lock so the functions in the queue can call
+    // `invoke` without deadlocking.
+    auto functions = std::move(invoke_queue);
     invoke_queue.clear();
     lock.unlock();
+    for (auto function : functions) {
+        function();
+    }
 }
 
 UvServer *server = nullptr;
@@ -242,6 +218,7 @@ UvServer *server = nullptr;
 void draconity_transport_main(transport_msg_fn callback, std::shared_ptr<cpptoml::table> config) {
     std::thread networkThread([config, callback] {
         server = new UvServer(callback, config);
+        draconity->init_pause_timer();
         server->run();
     });
     networkThread.detach();

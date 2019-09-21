@@ -93,6 +93,8 @@ static bson_t *handle_message(uint64_t client_id, uint32_t tid, const std::vecto
     char *cmd = NULL, *name = NULL;
     bool exclusive = false;
     int priority = 0, counter;
+    // Dragon won't supply a pause token of 0, so 0 implies no token.
+    uint64_t token = 0;
     bool has_exclusive = false, has_priority = false, has_lists = false;
 
     const uint8_t *data_buf = NULL, *phrase_buf = NULL, *words_buf, *active_rules_buf = NULL, *lists_buf = NULL;
@@ -118,6 +120,8 @@ static bson_t *handle_message(uint64_t client_id, uint32_t tid, const std::vecto
             } else if (streq(key, "priority") && BSON_ITER_HOLDS_INT32(&iter)) {
                 priority = bson_iter_int32(&iter);
                 has_priority = true;
+            } else if (streq(key, "token") && BSON_ITER_HOLDS_INT64(&iter)) {
+                token = bson_iter_int64(&iter);
             } else if (streq(key, "active_rules") && BSON_ITER_HOLDS_ARRAY(&iter)) {
                 bson_iter_array(&iter, &active_rules_len, &active_rules_buf);
             } else if (streq(key, "lists") && BSON_ITER_HOLDS_DOCUMENT(&iter)) {
@@ -313,6 +317,19 @@ static bson_t *handle_message(uint64_t client_id, uint32_t tid, const std::vecto
         } else {
             goto unsupported_command;
         }
+        if (draconity->pause_token != 0) {
+            // When Dragon is paused, we sync immediately (this allows the
+            // client to correct errors before unpausing).
+            draconity->sync_state();
+        }
+        resp = success_msg();
+        goto end;
+    } else if (streq(cmd, "unpause")) {
+        if (token == 0 || token != draconity->pause_token) {
+            errmsg = "missing or broken pause token";
+            goto end;
+        }
+        draconity->client_unpause(client_id, token);
         resp = success_msg();
         goto end;
     // diagnostic commands
@@ -511,10 +528,7 @@ void draconity_mimic_done(int key, dsx_mimic *mimic) {
 }
 
 void draconity_paused(int key, dsx_paused *paused) {
-    if (draconity->ready) {
-        draconity->sync_state();
-    }
-    _DSXEngine_Resume(_engine, paused->token);
+    draconity->handle_pause(paused->token);
 }
 
 int draconity_phrase_begin(void *key, void *data) {

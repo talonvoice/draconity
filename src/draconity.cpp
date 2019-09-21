@@ -2,11 +2,13 @@
 #include <string>
 #include <stdio.h>
 #include <bson.h>
+#include <uvw.hpp>
 
 #include "draconity.h"
 #include "abstract_platform.h"
 #include "phrase.h"
 #include "server.h"
+#include "transport/server.h"
 
 
 #define align4(len) ((len + 4) & ~3)
@@ -27,6 +29,7 @@ Draconity::Draconity() {
     dragon_enabled = false;
     mimic_success = false;
     engine = NULL;
+    pause_timeout = 10000;
 
     auto config_path = Platform::expanduser("~/.talon/draconity.toml");
     config = cpptoml::parse_file(config_path);
@@ -46,11 +49,19 @@ Draconity::Draconity() {
             std::cout << "================================" << std::endl;
         }
         // dragon config values
-        this->timeout            = config->get_as<int> ("timeout"           ).value_or(80);
-        this->timeout_incomplete = config->get_as<int> ("timeout_incomplete").value_or(500);
-        this->prevent_wake       = config->get_as<bool>("prevent_wake"      ).value_or(false);
+        this->timeout            = config->get_as<int>     ("timeout"           ).value_or(80);
+        this->timeout_incomplete = config->get_as<int>     ("timeout_incomplete").value_or(500);
+        this->prevent_wake       = config->get_as<bool>    ("prevent_wake"      ).value_or(false);
     }
     printf("[+] draconity: loaded config from %s\n", config_path.c_str());
+}
+
+// Must be called from the Uv thread
+void Draconity::init_pause_timer() {
+    this->pause_timer = server->loop->resource<uvw::TimerHandle>();
+    this->pause_timer->on<uvw::TimerEvent>([this](const auto &, auto &handle) {
+        this->do_unpause();
+    });
 }
 
 std::string Draconity::set_dragon_enabled(bool enabled) {
@@ -544,4 +555,54 @@ void Draconity::set_shadow_words(uint64_t client_id, uint32_t tid, std::set<std:
     new_state.words = std::move(words);
     this->shadow_words[client_id] = std::move(new_state);
     this->shadow_lock.unlock();
+}
+
+// Must be run on the Uv thread
+void Draconity::do_unpause() {
+    if (this->pause_token > 0 ) {
+        this->pause_clients.clear();
+        this->pause_timer->stop();
+        _DSXEngine_Resume(_engine, this->pause_token);
+        this->pause_token = 0;
+    }
+}
+
+// Must be run on the Uv thread
+void Draconity::client_unpause(uint64_t client_id, uint64_t token) {
+    if (this->pause_token == token) {
+        this->pause_clients.erase(client_id);
+        if (this->pause_clients.size() == 0) {
+            this->do_unpause();
+        }
+    }
+}
+
+void Draconity::handle_pause(uint64_t token) {
+    // We run the entire pause process on the Uv thread to avoid contention.
+    server->invoke([this, token] {
+        this->pause_token = token;
+        this->sync_state();
+        if (server->clients.empty()) {
+            // There are no clients to wait for so we unpause immediately.
+            this->do_unpause();
+        } else {
+            for (auto &client : server->clients) {
+                this->pause_clients.insert(client->id);
+            }
+            draconity_publish("paused", BCON_NEW("token", BCON_INT64(token)));
+            this->pause_timer->start(uvw::TimerHandle::Time{draconity->pause_timeout},
+                                     uvw::TimerHandle::Time{0});
+        }
+    });
+}
+
+// Must be run on uv thread.
+void Draconity::handle_disconnect(uint64_t client_id) {
+    // Unload everything related to a client when it disconnects.
+    this->clear_client_state(client_id);
+    // We might be waiting on the client to unpause.
+    if (this->pause_token > 0) {
+        this->sync_state();
+        this->client_unpause(client_id, this->pause_token);
+    }
 }
