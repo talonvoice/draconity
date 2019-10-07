@@ -248,7 +248,10 @@ static bson_t *handle_message(uint64_t client_id, uint32_t tid, const std::vecto
         }
 
         if (streq(cmd, "g.set")) {
-            // TODO: Handle missing `data` field?
+            if (!data_buf || !data_len) {
+                errmsg = "missing or broken data field";
+                goto end;
+            }
             shadow_grammar.blob = make_blob(data_buf, data_len);
 
             // Decode "rules"
