@@ -412,6 +412,7 @@ static bson_t *handle_message(uint64_t client_id, uint32_t tid, const std::vecto
         int rc = _DSXEngine_Mimic(_engine, 0, count, &dp, 0, 2);
         if (rc) {
             errstream << "error during mimic: " << rc;
+            errmsg = errstream.str();
             free(dp.data);
             draconity->mimic_lock.unlock();
             goto end;
