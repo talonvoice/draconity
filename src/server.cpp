@@ -432,8 +432,8 @@ static bson_t *handle_message(uint64_t client_id, uint32_t tid, const std::vecto
     } else {
         goto unsupported_command;
     }
-    bson_t *pub;
 end:
+    bson_t *pub;
     free(cmd);
     free(name);
 
