@@ -21,6 +21,7 @@ DLAPI int (*_DSXWordEnum_End)(drg_worditer *iter, void *dunno);
 
 DLAPI int (*_DSXEngine_LoadGrammar)(drg_engine *engine, int type, dsx_dataptr *data, drg_grammar **grammar_out);
 DLAPI void *(*_DSXEngine_GetCurrentSpeaker)(drg_engine *engine);
+DLAPI int (*_DSXEngine_SetMicState)(drg_engine *engine, int state, int unk1, int unk2);
 DLAPI int (*_DSXEngine_GetMicState)(drg_engine *engine, int64_t *state);
 DLAPI int (*_DSXEngine_Mimic)(drg_engine *engine, int unk1, unsigned int count, dsx_dataptr *data, unsigned int unk2, int type);
 DLAPI int (*_DSXEngine_RegisterAttribChangedCallback)(drg_engine *engine,  void (*cb)(int, dsx_attrib*), void *user, unsigned int *key);

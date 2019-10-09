@@ -82,6 +82,29 @@ static std::vector<uint8_t> make_blob(const uint8_t *buffer, uint32_t length) {
     return result;
 }
 
+static const char *micstates[] = {
+    "disabled",
+    "off",
+    "on",
+    "sleeping",
+    "pause",
+    "resume",
+};
+
+// Get the int code for a settable mic state name. Returns -1 if it's invalid.
+static int settable_micstate_code(char* state_name) {
+    // We only allow these three micstates - the others aren't very useful.
+    if (streq(state_name, "off")) {
+        return 1;
+    } else if (streq(state_name, "on")) {
+        return 2;
+    } else if (streq(state_name, "sleeping")) {
+        return 3;
+    } else {
+        return -1;
+    }
+}
+
 static bson_t *success_msg() {
     return BCON_NEW("success", BCON_BOOL(true));
 }
@@ -90,7 +113,7 @@ static bson_t *handle_message(uint64_t client_id, uint32_t tid, const std::vecto
     std::ostringstream errstream;
     std::string errmsg = "";
 
-    char *cmd = NULL, *name = NULL;
+    char *cmd = NULL, *name = NULL, *state = NULL;
     bool exclusive = false;
     int priority = 0, counter;
     // Dragon won't supply a pause token of 0, so 0 implies no token.
@@ -114,6 +137,8 @@ static bson_t *handle_message(uint64_t client_id, uint32_t tid, const std::vecto
                 cmd = bson_iter_dup_utf8(&iter, NULL);
             } else if (streq(key, "name") && BSON_ITER_HOLDS_UTF8(&iter)) {
                 name = bson_iter_dup_utf8(&iter, NULL);
+            } else if (streq(key, "state") && BSON_ITER_HOLDS_UTF8(&iter)) {
+                state = bson_iter_dup_utf8(&iter, NULL);
             } else if (streq(key, "exclusive") && BSON_ITER_HOLDS_BOOL(&iter)) {
                 exclusive = bson_iter_bool(&iter);
                 has_exclusive = true;
@@ -327,6 +352,24 @@ static bson_t *handle_message(uint64_t client_id, uint32_t tid, const std::vecto
         }
         resp = success_msg();
         goto end;
+    } else if (streq(cmd, "mic.set_state")) {
+        if (!state) {
+            errmsg = "missing or broken state field";
+            goto end;
+        }
+        int micstate_code = settable_micstate_code(state);
+        if (micstate_code == -1) {
+            errmsg = "invalid mic state";
+            goto end;
+        }
+        int rc = _DSXEngine_SetMicState(_engine, micstate_code, 0, 0);
+        if (rc) {
+            errstream << "error setting mic state: " << rc;
+            errmsg = errstream.str();
+            goto end;
+        }
+        resp = success_msg();
+        goto end;
     } else if (streq(cmd, "unpause")) {
         if (token == 0 || token != draconity->pause_token) {
             errmsg = "missing or broken pause token";
@@ -472,15 +515,6 @@ void draconity_init() {
     draconity_publish("status", BCON_NEW("cmd", BCON_UTF8("thread_created")));
     draconity->start_ts = bson_get_monotonic_time();
 }
-
-static const char *micstates[] = {
-    "disabled",
-    "off",
-    "on",
-    "sleeping",
-    "pause",
-    "resume",
-};
 
 std::mutex readyLock;
 

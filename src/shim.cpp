@@ -192,6 +192,12 @@ static int DSXEngine_GetMicState(drg_engine *engine, int64_t *state) {
     return orig_DSXEngine_GetMicState(engine, state);
 }
 
+int (*orig_DSXEngine_SetMicState)(drg_engine *engine, int state, int unk1, int unk2);
+static int DSXEngine_SetMicState(drg_engine *engine, int state, int unk1, int unk2) {
+    engine_acquire(engine, false);
+    return orig_DSXEngine_SetMicState(engine, state, unk1, unk2);
+}
+
 int (*orig_DSXEngine_LoadGrammar)(drg_engine *engine, int format, void *data, void **grammar);
 static int DSXEngine_LoadGrammar(drg_engine *engine, int format, void *data, void **grammar) {
     engine_acquire(engine, false);
@@ -205,6 +211,7 @@ static std::list<CodeHook> server_hooks {
     h(DSXEngine_New),
     h(DSXEngine_Create),
     h(DSXEngine_GetMicState),
+    h(DSXEngine_SetMicState),
     h(DSXEngine_LoadGrammar),
 };
 #undef h
@@ -225,6 +232,7 @@ static std::list<SymbolLoad> server_syms {
     s(DSXWordEnum_End),
 
     s(DSXEngine_GetCurrentSpeaker),
+    s(DSXEngine_SetMicState),
     s(DSXEngine_GetMicState),
     s(DSXEngine_LoadGrammar),
     s(DSXEngine_Mimic),
