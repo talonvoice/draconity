@@ -408,7 +408,6 @@ static bson_t *handle_message(uint64_t client_id, uint32_t tid, const std::vecto
         BSON_APPEND_UTF8(&child, "name", "dragon");
         BSON_APPEND_BOOL(&child, "enabled", draconity->dragon_enabled);
         BSON_APPEND_INT32(&child, "priority", 0);
-        BSON_APPEND_BOOL(&child, "exclusive", false);
         bson_append_document_end(&grammars, &child);
 
         bson_append_array_end(doc, &grammars);
