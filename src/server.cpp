@@ -363,7 +363,9 @@ static bson_t *handle_message(uint64_t client_id, uint32_t tid, const std::vecto
             goto end;
         }
         int rc = _DSXEngine_SetMicState(_engine, micstate_code, 0, 0);
-        if (rc) {
+        // An rc of -1 means we're already in the target mic state - that's
+        // fine.
+        if (rc && rc != -1) {
             errstream << "error setting mic state: " << rc;
             errmsg = errstream.str();
             goto end;
