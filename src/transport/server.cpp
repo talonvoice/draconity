@@ -136,6 +136,7 @@ void UvServer::listenPipe(std::string path) {
         stream->once<uvw::CloseEvent>([this, baseClient](auto &, auto &stream) {
             printf("[+] draconity transport: closing pipe connection to peer %s\n", peername(stream.peer()).c_str());
             clients.remove(baseClient);
+            draconity->handle_disconnect(baseClient->id);
         });
         stream->once<uvw::ErrorEvent>([client](auto &event, auto &stream) {
             printf("[+] draconity transport: pipe error for peer %s: [%d] %s\n",
