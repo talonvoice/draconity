@@ -73,15 +73,6 @@ void draconity_logf(const char *fmt, ...) {
     delete str;
 }
 
-/* Copy a byte array into a vector */
-static std::vector<uint8_t> make_blob(const uint8_t *buffer, uint32_t length) {
-    std::vector<uint8_t> result;
-    for (uint32_t i = 0; i < length; ++i) {
-        result.push_back(buffer[i]);
-    }
-    return result;
-}
-
 static const char *micstates[] = {
     "disabled",
     "off",
@@ -277,7 +268,7 @@ static bson_t *handle_message(uint64_t client_id, uint32_t tid, const std::vecto
                 errmsg = "missing or broken data field";
                 goto end;
             }
-            shadow_grammar.blob = make_blob(data_buf, data_len);
+            shadow_grammar.blob = std::move(std::vector<uint8_t>(data_buf, data_buf + data_len));
 
             // Decode "rules"
             if (!active_rules_buf || !active_rules_len) {
