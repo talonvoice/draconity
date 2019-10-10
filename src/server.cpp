@@ -438,6 +438,7 @@ static bson_t *handle_message(uint64_t client_id, uint32_t tid, const std::vecto
         dp.data = calloc(1, dp.size);
         uint8_t *pos = (uint8_t *)dp.data;
         if (!bson_iter_init_from_data(&iter, phrase_buf, phrase_len)) {
+            free(dp.data);
             errmsg = "mimic phrase iter failed";
             goto end;
         }
@@ -449,28 +450,19 @@ static bson_t *handle_message(uint64_t client_id, uint32_t tid, const std::vecto
             pos += length + 1;
             count++;
         }
-        draconity->mimic_lock.lock();
-        draconity->mimic_success = false;
-
         int rc = _DSXEngine_Mimic(_engine, 0, count, &dp, 0, 2);
+        free(dp.data);
         if (rc) {
             errstream << "error during mimic: " << rc;
             errmsg = errstream.str();
-            free(dp.data);
-            draconity->mimic_lock.unlock();
             goto end;
         }
-        free(dp.data);
-        // TODO: if dragon fails to issue callback, draconity will hang forever
-        struct timespec timeout = {.tv_sec = 10, .tv_nsec = 0};
-        // FIXME: port timedwait to C++
-        // rc = pthread_cond_timedwait_relative_np(&state.mimic_cond, &state.mimic_lock, &timeout);
+        // We have to synchronize the mimic callback to a specific mimic.
+        // Waiting for the callback will deadlock, so we use a FIFO queue and
+        // rely on mimics being queued in the right order. This could be janky.
+        draconity->mimic_lock.lock();
+        draconity->mimic_queue.push({client_id, tid});
         draconity->mimic_lock.unlock();
-        bool success = (rc == 0 && draconity->mimic_success);
-        if (!success) {
-            errmsg = "mimic failed";
-            goto end;
-        }
         resp = success_msg();
     } else {
         goto unsupported_command;
@@ -559,10 +551,22 @@ void draconity_attrib_changed(int key, dsx_attrib *attrib) {
 
 void draconity_mimic_done(int key, dsx_mimic *mimic) {
     draconity->mimic_lock.lock();
-    draconity->mimic_success = true;
-    // FIXME: signal the condvar
-    // pthread_cond_signal(&state.mimic_cond);
-    draconity->mimic_lock.unlock();
+    // If we pop too many items, we have a problem, but we still want to protect
+    // Draconity a crash.
+    if (draconity->mimic_queue.empty()) {
+        // TODO: Maybe log this?
+        draconity->mimic_lock.unlock();
+    } else {
+        auto &mimic_info = draconity->mimic_queue.front();
+        draconity->mimic_queue.pop();
+        draconity->mimic_lock.unlock();
+        uint64_t client_id = mimic_info.first;
+        uint32_t tid = mimic_info.second;
+        draconity_publish_one("mimic",
+                              BCON_NEW("cmd", "mimic.done",
+                                       "tid", BCON_INT32(tid)),
+                              client_id);
+    }
 }
 
 void draconity_paused(int key, dsx_paused *paused) {

@@ -27,7 +27,6 @@ Draconity::Draconity() {
     micstate = NULL;
     ready = false;
     dragon_enabled = false;
-    mimic_success = false;
     engine = NULL;
     pause_timeout = 10000;
 

@@ -6,6 +6,7 @@
 #include <map>
 #include <mutex>
 #include <unordered_set>
+#include <queue>
 #include <cstring>
 #include <uvw.hpp>
 
@@ -67,8 +68,8 @@ public:
 
     std::shared_ptr<cpptoml::table> config;
     std::mutex mimic_lock;
-    std::condition_variable mimic_cond;
-    bool mimic_success;
+    // Each pair holds a transaction's info - <client_id, tid>
+    std::queue<std::pair<uint64_t, uint32_t>> mimic_queue;
     drg_engine *engine;
 
     // loaded from the config
