@@ -63,3 +63,4 @@ set_target_properties(draconity PROPERTIES
     CXX_STANDARD 17
     CXX_EXTENSIONS OFF
 )
+install(TARGETS draconity LIBRARY DESTINATION lib)
