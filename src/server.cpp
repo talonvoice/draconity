@@ -106,8 +106,6 @@ static bson_t *handle_message(const std::vector<uint8_t> &msg) {
                 bson_iter_array(&iter, &words_len, &words_buf);
             } else if (streq(key, "data") && BSON_ITER_HOLDS_BINARY(&iter)) {
                 bson_iter_binary(&iter, NULL, &data_len, &data_buf);
-            } else if (streq(key, "pingpong-counter") && BSON_ITER_HOLDS_INT32(&iter)) {
-                counter = bson_iter_int32(&iter);
             }
         }
     }
@@ -117,15 +115,7 @@ static bson_t *handle_message(const std::vector<uint8_t> &msg) {
         errmsg = "missing or broken cmd field";
         goto end;
     }
-    if (streq(cmd, "ping")) {
-        printf("[+] Draconity ping/pong: recognized ping! Received counter is %" PRIi32
-               "; responding with %" PRIi32 "\n", counter, counter + 1);
-        counter++;
-        bson_t *response = bson_new();
-        BSON_APPEND_UTF8(response, "cmd", "pong");
-        BSON_APPEND_INT32(response, "pingpong-counter", counter);
-        resp = response;
-    } else if (cmd[0] == 'w') {
+    if (cmd[0] == 'w') {
         if (!draconity->ready) goto not_ready;
         if (!_DSXEngine_EnumWords ||
                 !_DSXWordEnum_Next ||
