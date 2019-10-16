@@ -21,6 +21,7 @@ DLAPI int (*_DSXWordEnum_End)(drg_worditer *iter, void *dunno);
 
 DLAPI int (*_DSXEngine_LoadGrammar)(drg_engine *engine, int type, dsx_dataptr *data, drg_grammar **grammar_out);
 DLAPI void *(*_DSXEngine_GetCurrentSpeaker)(drg_engine *engine);
+DLAPI int (*_DSXEngine_SetMicState)(drg_engine *engine, int state, int unk1, int unk2);
 DLAPI int (*_DSXEngine_GetMicState)(drg_engine *engine, int64_t *state);
 DLAPI int (*_DSXEngine_Mimic)(drg_engine *engine, int unk1, unsigned int count, dsx_dataptr *data, unsigned int unk2, int type);
 DLAPI int (*_DSXEngine_RegisterAttribChangedCallback)(drg_engine *engine,  void (*cb)(int, dsx_attrib*), void *user, unsigned int *key);
@@ -36,7 +37,7 @@ DLAPI int (*_DSXEngine_SetBeginPhraseCallback)(drg_engine *engine, int (*cb)(voi
 DLAPI int (*_DSXEngine_SetEndPhraseCallback)(drg_engine *engine, void *cb, void *user, unsigned int *key);
 
 DLAPI int (*_DSXEngine_Pause)(drg_engine *engine);
-DLAPI int (*_DSXEngine_Resume)(drg_engine *engine, uintptr_t token);
+DLAPI int (*_DSXEngine_Resume)(drg_engine *engine, uint64_t token);
 DLAPI int (*_DSXEngine_ResumeRecognition)(drg_engine *engine);
 
 DLAPI int (*_DSXFileSystem_PreferenceSetValue)(drg_filesystem *fs, char *a, char *b, char *c, char *d);
@@ -46,8 +47,8 @@ DLAPI int (*_DSXFileSystem_SetUsersDirectory)(drg_filesystem *fs, char *a, bool 
 DLAPI int (*_DSXFileSystem_SetVocabsLocation)(drg_filesystem *fs, char *a, bool unk);
 DLAPI int (*_DSXFileSystem_SetResultsDirectory)(drg_filesystem *fs, char *a, bool unk);
 
-DLAPI int (*_DSXGrammar_Activate)(drg_grammar *grammar, uintptr_t unk1, bool unk2, const char *main_rule);
-DLAPI int (*_DSXGrammar_Deactivate)(drg_grammar *grammar, uintptr_t unk1, const char *main_rule);
+DLAPI int (*_DSXGrammar_Activate)(drg_grammar *grammar, uintptr_t unk1, bool unk2, const char *rule);
+DLAPI int (*_DSXGrammar_Deactivate)(drg_grammar *grammar, uintptr_t unk1, const char *rule);
 DLAPI int (*_DSXGrammar_Destroy)(drg_grammar *);
 DLAPI int (*_DSXGrammar_GetList)(drg_grammar *grammar, const char *name, dsx_dataptr *data);
 DLAPI int (*_DSXGrammar_RegisterBeginPhraseCallback)(drg_grammar *grammar, int (*cb)(void *, void *), void *user, unsigned int *key);

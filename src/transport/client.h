@@ -5,16 +5,19 @@ class UvClientBase {
 public:
     virtual void publish(const std::vector<uint8_t> &msg) {}
     virtual ~UvClientBase() {};
+public:
+    uint64_t id;
 };
 
 template <typename T>
 class UvClient : public UvClientBase {
 public:
-    UvClient(std::shared_ptr<T> stream, transport_msg_fn callback, std::string secret) {
+    UvClient(std::shared_ptr<T> stream, transport_msg_fn callback, std::string secret, uint64_t client_id) {
         this->stream = stream;
         this->handle_message_callback = callback;
         this->authed = false;
         this->secret = secret;
+        this->id = client_id;
     }
 
     template <typename E>
@@ -61,7 +64,7 @@ private:
         if (!authed) {
             reply = handleAuth(msg);
         } else {
-            reply = handle_message_callback(msg);
+            reply = handle_message_callback(this->id, received_header->tid, msg);
         }
         uint32_t reply_length;
         uint8_t *reply_data = bson_destroy_with_steal(reply, true, &reply_length);

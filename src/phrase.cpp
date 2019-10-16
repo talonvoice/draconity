@@ -65,11 +65,11 @@ extern "C" int phrase_publish(void *key, dsx_end_phrase *endphrase, const char *
     bool ours = (endphrase->flags & 2) == 2;
     bson_t obj = BSON_INITIALIZER;
 
-    std::string name = draconity->gkey_to_name((uintptr_t)key);
-    if (name.size() == 0) goto end;
+    std::shared_ptr<Grammar> grammar = draconity->get_grammar((uintptr_t)key);
+    if (grammar == NULL) goto end;
 
     BSON_APPEND_UTF8(&obj, "cmd", cmd);
-    BSON_APPEND_UTF8(&obj, "grammar", name.c_str());
+    BSON_APPEND_UTF8(&obj, "grammar", grammar->name.c_str());
     if ((accept && ours) || hypothesis) {
         phrase_to_bson(&obj, endphrase->phrase);
         result_to_bson(&obj, endphrase->result);
@@ -79,7 +79,7 @@ extern "C" int phrase_publish(void *key, dsx_end_phrase *endphrase, const char *
         BSON_APPEND_ARRAY_BEGIN(&obj, "phrase", &array);
         bson_append_array_end(&obj, &array);
     }
-    draconity_publish("phrase", &obj);
+    draconity_publish_one("phrase", &obj, grammar->state.client_id);
 end:
     _DSXResult_Destroy(endphrase->result);
     return 0;
@@ -94,8 +94,11 @@ extern "C" int phrase_hypothesis(void *key, dsx_end_phrase *endphrase) {
 }
 
 extern "C" int phrase_begin(void *key, void *data) {
-    std::string name = draconity->gkey_to_name((uintptr_t)key);
-    if (name.size() == 0) return 0;
-    draconity_publish("phrase", BCON_NEW("cmd", BCON_UTF8("p.begin"), "grammar", BCON_UTF8(name.c_str())));
+    std::shared_ptr<Grammar> grammar = draconity->get_grammar((uintptr_t)key);
+    if (grammar == NULL) return 0;
+    draconity_publish_one("phrase",
+                          BCON_NEW("cmd", BCON_UTF8("p.begin"),
+                                   "grammar", BCON_UTF8(grammar->name.c_str())),
+                          grammar->state.client_id);
     return 0;
 }

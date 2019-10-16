@@ -1,33 +1,49 @@
 #pragma once
 #include <string>
+#include <list>
+#include <set>
+#include <vector>
+#include <unordered_map>
 #include "types.h"
+
+struct GrammarState {
+    public:
+    std::vector<uint8_t> blob;
+    std::set<std::string> active_rules;
+    std::unordered_map<std::string, std::set<std::string>> lists;
+    bool unload;
+    uint64_t client_id;  // Client that set this state
+    uint32_t tid;        // Transaction that set this state
+};
 
 class Grammar {
     public:
-        Grammar(std::string name, std::string main_rule) {
-            this->key = 0;
+    Grammar(std::string name) {
             this->name = name;
-            this->main_rule = main_rule;
+            this->errors = {};
+            this->key = 0;
             this->handle = nullptr;
             this->enabled = false;
-            this->exclusive = false;
             this->priority = 0;
             this->endkey = 0;
             this->beginkey = 0;
             this->hypokey = 0;
         };
 
-        int enable();
-        int disable();
-        int load(void *data, uint32_t size);
-        int unload();
+        void record_error(std::string type, std::string msg, int rc, std::string name);
+
+        std::list<std::unordered_map<std::string, std::string>> errors;
+
+        GrammarState state;
+        std::set<std::string> exclusive_rules;
+
         std::string error;
 
         uintptr_t key;
-        std::string name, main_rule;
+        std::string name;
         drg_grammar *handle;
 
-        bool enabled, exclusive;
+        bool enabled;
         int priority;
         std::string appname;
         unsigned int endkey, beginkey, hypokey;
