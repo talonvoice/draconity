@@ -29,6 +29,7 @@ Draconity::Draconity() {
     dragon_enabled = false;
     engine = NULL;
     pause_timeout = 10000;
+    engine_name = "dragon";
 
     auto config_path = Platform::expanduser("~/.talon/draconity.toml");
     config = cpptoml::parse_file(config_path);

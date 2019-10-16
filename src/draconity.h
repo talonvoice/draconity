@@ -67,6 +67,7 @@ public:
     std::mutex dragon_lock;
     bool dragon_enabled;
 
+    std::string engine_name;
     std::shared_ptr<cpptoml::table> config;
     std::mutex mimic_lock;
     // Each pair holds a transaction's info - <client_id, tid>

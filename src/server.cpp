@@ -367,6 +367,7 @@ static bson_t *handle_message(uint64_t client_id, uint32_t tid, const std::vecto
         char keystr[16];
         const char *key;
         bson_t *doc = BCON_NEW(
+            "engine_name", BCON_UTF8(draconity->engine_name.c_str()),
             "success", BCON_BOOL(true),
             "ready", BCON_BOOL(draconity->ready),
             "runtime", BCON_INT64(bson_get_monotonic_time() - draconity->start_ts));
@@ -496,7 +497,9 @@ void draconity_ready() {
     readyLock.lock();
     if (!draconity->ready) {
         printf("[+] status: ready\n");
-        draconity_publish("status", BCON_NEW("cmd", BCON_UTF8("ready")));
+        draconity_publish("status",
+            BCON_NEW("cmd", BCON_UTF8("ready"),
+                     "engine_name", BCON_UTF8(draconity->engine_name.c_str()) ));
         draconity->ready = true;
     }
     readyLock.unlock();
