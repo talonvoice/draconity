@@ -132,7 +132,7 @@ int load_grammar(std::shared_ptr<Grammar> &grammar, std::vector<uint8_t> &blob) 
     int rc;
     void *grammar_key = (void *)grammar.get();
     dsx_dataptr blob_dp = {.data = blob.data(),
-                           .size = blob.size()};
+                           .size = (uint32_t)blob.size()};
     if ((rc = _DSXEngine_LoadGrammar(_engine, 1 /* cfg */, &blob_dp, &grammar->handle))) {
         grammar->record_error("grammar", "error loading grammar", rc, grammar->name);
         return rc;
