@@ -41,6 +41,16 @@ typedef struct {} drg_worditer;
 typedef struct {} dsx_result;
 
 typedef struct {
+     void *var0;
+     unsigned int flags;
+     uint64_t var2;
+     uint64_t var3;
+     char *phrase;
+     dsx_result *result;
+     void *var6;
+ } dsx_hypothesis;
+
+typedef struct {
     void *var0;
     unsigned int var1;
     unsigned int flags;

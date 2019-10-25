@@ -3,6 +3,8 @@
 #include "phrase.h"
 #include "server.h"
 
+extern "C" {
+
 static void phrase_to_bson(bson_t *obj, char *phrase) {
     bson_t array;
     char keystr[16];
@@ -60,40 +62,40 @@ static void result_to_bson(bson_t *obj, dsx_result *result) {
     bson_append_array_end(obj, &words);
 }
 
-extern "C" int phrase_publish(void *key, dsx_end_phrase *endphrase, const char *cmd, bool hypothesis) {
-    bool accept = (endphrase->flags & 1) == 1;
-    bool ours = (endphrase->flags & 2) == 2;
+void phrase_publish(void *key, char *phrase, dsx_result *result, const char *cmd, bool use_result) {
     bson_t obj = BSON_INITIALIZER;
-
     std::shared_ptr<Grammar> grammar = draconity->get_grammar((uintptr_t)key);
-    if (grammar == NULL) goto end;
+    if (grammar == NULL) return;
 
     BSON_APPEND_UTF8(&obj, "cmd", cmd);
     BSON_APPEND_UTF8(&obj, "grammar", grammar->name.c_str());
-    if ((accept && ours) || hypothesis) {
-        phrase_to_bson(&obj, endphrase->phrase);
-        result_to_bson(&obj, endphrase->result);
-        // TODO: figure out when all I should call destroy
+    if (use_result) {
+        phrase_to_bson(&obj, phrase);
+        result_to_bson(&obj, result);
     } else {
         bson_t array;
         BSON_APPEND_ARRAY_BEGIN(&obj, "phrase", &array);
         bson_append_array_end(&obj, &array);
     }
     draconity_publish_one("phrase", &obj, grammar->state.client_id);
-end:
+}
+
+int phrase_end(void *key, dsx_end_phrase *endphrase) {
+    bool accept = (endphrase->flags & 1) == 1;
+    bool ours = (endphrase->flags & 2) == 2;
+
+    phrase_publish(key, endphrase->phrase, endphrase->result, "p.end", (accept && ours));
     _DSXResult_Destroy(endphrase->result);
     return 0;
 }
 
-extern "C" int phrase_end(void *key, dsx_end_phrase *endphrase) {
-    return phrase_publish(key, endphrase, "p.end", false);
+int phrase_hypothesis(void *key, dsx_hypothesis *hypothesis) {
+    phrase_publish(key, hypothesis->phrase, hypothesis->result, "p.hypothesis", true);
+    _DSXResult_Destroy(hypothesis->result);
+    return 0;
 }
 
-extern "C" int phrase_hypothesis(void *key, dsx_end_phrase *endphrase) {
-    return phrase_publish(key, endphrase, "p.hypothesis", true);
-}
-
-extern "C" int phrase_begin(void *key, void *data) {
+int phrase_begin(void *key, void *data) {
     std::shared_ptr<Grammar> grammar = draconity->get_grammar((uintptr_t)key);
     if (grammar == NULL) return 0;
     draconity_publish_one("phrase",
@@ -102,3 +104,5 @@ extern "C" int phrase_begin(void *key, void *data) {
                           grammar->state.client_id);
     return 0;
 }
+
+} // extern "C"
