@@ -17,7 +17,7 @@ public:
     void run();
 
     void publish(std::vector<uint8_t> msg);
-    int publish_one(std::vector<uint8_t> msg, uint64_t client_id);
+    void publish_one(std::vector<uint8_t> msg, uint64_t client_id);
     void invoke(std::function<void()> fn);
 public:
     std::shared_ptr<uvw::Loop> loop;

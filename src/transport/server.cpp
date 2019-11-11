@@ -187,19 +187,18 @@ void UvServer::publish(std::vector<uint8_t> msg) {
 
 /* Publish the `msg` to a single client.
 
-   If the client no longer exists, does nothing and returns 1.
-
+   If the client no longer exists, does nothing.
  */
-int UvServer::publish_one(std::vector<uint8_t> msg, uint64_t client_id) {
+void UvServer::publish_one(std::vector<uint8_t> msg, uint64_t client_id) {
     // TODO: Store clients in a map for quicker id lookup?
-    for (auto const &client : clients) {
-        if (client->id == client_id) {
-            client->publish(std::move(msg));
-            return 0;
+    invoke([this, client_id, msg{std::move(msg)}] {
+        for (auto const &client : clients) {
+            if (client->id == client_id) {
+                client->publish(std::move(msg));
+                return;
+            }
         }
-    }
-    // Client doesn't exist (i.e. it's disconnected).
-    return 1;
+    });
 }
 
 void UvServer::drain_invoke_queue() {
