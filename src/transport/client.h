@@ -66,10 +66,14 @@ private:
         } else {
             reply = handle_message_callback(this->id, received_header->tid, msg);
         }
-        uint32_t reply_length;
-        uint8_t *reply_data = bson_destroy_with_steal(reply, true, &reply_length);
-        writeMessage(received_header->tid, reply_data, reply_length);
-        bson_free(reply_data);
+        // HACK: Some messages won't return a reply immediately. If a message
+        //   returns null, it's making a pinky promise to reply later.
+        if (reply) {
+            uint32_t reply_length;
+            uint8_t *reply_data = bson_destroy_with_steal(reply, true, &reply_length);
+            writeMessage(received_header->tid, reply_data, reply_length);
+            bson_free(reply_data);
+        }
     }
 
     bson_t *handleAuth(std::vector<uint8_t> &msg) {
