@@ -31,7 +31,11 @@ Draconity::Draconity() {
     pause_timeout = 10000;
     engine_name = "dragon";
 
+#ifdef _WIN32
+    auto config_path = Platform::expanduser("~/talon/draconity.toml");
+#else
     auto config_path = Platform::expanduser("~/.talon/draconity.toml");
+#endif
     config = cpptoml::parse_file(config_path);
     if (config) {
         auto logfile = *config->get_as<std::string>("logfile");
