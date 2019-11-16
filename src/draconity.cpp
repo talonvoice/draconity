@@ -291,10 +291,10 @@ void bson_append_errors(bson_t *response,
    `status` can be one of { "success", "error", "skipped" }.
 
  */
-void publish_gset_response(const uint64_t client_id, const uint32_t tid,
-                           std::string &grammar_name,
-                           std::string status,
-                           std::list<std::unordered_map<std::string, std::string>> &errors) {
+void send_gset_response(const uint64_t client_id, const uint32_t tid,
+                        std::string &grammar_name,
+                        std::string status,
+                        std::list<std::unordered_map<std::string, std::string>> &errors) {
     bson_t *response = BCON_NEW(
         "name", BCON_UTF8(grammar_name.c_str()),
         "status", BCON_UTF8(status.c_str()),
@@ -381,8 +381,8 @@ void Draconity::sync_grammars() {
             grammar->errors = {};
         }
 
-        publish_gset_response(shadow_state.client_id, shadow_state.tid,
-                              name, operation_status, errors);
+        send_gset_response(shadow_state.client_id, shadow_state.tid,
+                           name, operation_status, errors);
     }
     // Only un-synced grammars should be in the shadow state.
     this->shadow_grammars.clear();
@@ -539,7 +539,7 @@ void Draconity::set_shadow_grammar(std::string name, GrammarState &shadow_gramma
     if (skipped_it != this->shadow_grammars.end()) {
         GrammarState &skipped = skipped_it->second;
         std::list<std::unordered_map<std::string, std::string>> no_errors = {};
-        publish_gset_response(skipped.client_id, skipped.tid, name, "skipped", no_errors);
+        send_gset_response(skipped.client_id, skipped.tid, name, "skipped", no_errors);
     }
     this->shadow_grammars[name] = std::move(shadow_grammar);
     this->shadow_lock.unlock();
