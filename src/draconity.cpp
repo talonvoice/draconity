@@ -469,8 +469,8 @@ void Draconity::set_words(std::set<std::string> &new_words, std::list<std::unord
    distinct from the result of the initial API call.
 
  */
-void publish_wset_response(uint64_t client_id, uint32_t tid, std::string status,
-                           std::list<std::unordered_map<std::string, std::string>> errors) {
+void send_wset_response(uint64_t client_id, uint32_t tid, std::string status,
+                        std::list<std::unordered_map<std::string, std::string>> errors) {
     bson_t *response = BCON_NEW(
         "status", BCON_UTF8(status.c_str()),
         "tid", BCON_INT32(tid)
@@ -499,9 +499,9 @@ void Draconity::handle_word_failures(std::list<std::unordered_map<std::string, s
             }
         }
         if (client_errors.size() == 0) {
-            publish_wset_response(client_id, tid, "success", client_errors);
+            send_wset_response(client_id, tid, "success", client_errors);
         } else {
-            publish_wset_response(client_id, tid, "error", client_errors);
+            send_wset_response(client_id, tid, "error", client_errors);
         }
     }
 }
@@ -551,7 +551,7 @@ void Draconity::set_shadow_words(uint64_t client_id, uint32_t tid, std::set<std:
     if ((existing_it != this->shadow_words.end()) && !existing_it->second.synced) {
         // An unsynced update exists. We need to tell the client it was skipped.
         std::list<std::unordered_map<std::string, std::string>> no_errors = {};
-        publish_wset_response(client_id, existing_it->second.last_tid, "skipped", no_errors);
+        send_wset_response(client_id, existing_it->second.last_tid, "skipped", no_errors);
     }
     WordState new_state;
     new_state.last_tid = tid;
