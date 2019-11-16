@@ -48,10 +48,10 @@ void draconity_publish(const char *topic, bson_t *obj) {
 }
 
 /* Publish a message to a single client */
-void draconity_publish_one(const char *topic, bson_t *obj, uint64_t client_id) {
+void draconity_publish_one(const char *topic, bson_t *obj, uint32_t tid, uint64_t client_id) {
     auto response = prep_response(topic, obj);
     if (!response.empty()) {
-        draconity_transport_publish_one(std::move(response), client_id);
+        draconity_transport_publish_one(std::move(response), tid, client_id);
     }
 }
 
@@ -570,8 +570,8 @@ void draconity_mimic_done(int key, dsx_mimic *mimic) {
         uint64_t client_id = mimic_info.first;
         uint32_t tid = mimic_info.second;
         draconity_publish_one("mimic",
-                              BCON_NEW("cmd", "mimic.done",
-                                       "tid", BCON_INT32(tid)),
+                              BCON_NEW("cmd", "mimic.done"),
+                              tid,
                               client_id);
     }
 }

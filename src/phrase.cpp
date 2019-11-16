@@ -2,6 +2,7 @@
 #include "draconity.h"
 #include "phrase.h"
 #include "server.h"
+#include "transport/transport.h"
 
 extern "C" {
 
@@ -77,7 +78,7 @@ void phrase_publish(void *key, char *phrase, dsx_result *result, const char *cmd
         BSON_APPEND_ARRAY_BEGIN(&obj, "phrase", &array);
         bson_append_array_end(&obj, &array);
     }
-    draconity_publish_one("phrase", &obj, grammar->state.client_id);
+    draconity_publish_one("phrase", &obj, PUBLISH_TID, grammar->state.client_id);
 }
 
 int phrase_end(void *key, dsx_end_phrase *endphrase) {
@@ -101,6 +102,7 @@ int phrase_begin(void *key, void *data) {
     draconity_publish_one("phrase",
                           BCON_NEW("cmd", BCON_UTF8("p.begin"),
                                    "grammar", BCON_UTF8(grammar->name.c_str())),
+                          PUBLISH_TID,
                           grammar->state.client_id);
     return 0;
 }

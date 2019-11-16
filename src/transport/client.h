@@ -4,6 +4,7 @@
 class UvClientBase {
 public:
     virtual void publish(const std::vector<uint8_t> &msg) {}
+    virtual void writeMessage(const uint32_t tid, const std::vector<uint8_t> &msg) {}
     virtual ~UvClientBase() {};
 public:
     uint64_t id;
@@ -56,6 +57,10 @@ public:
     // response to an incoming message).
     void publish(const std::vector<uint8_t> &msg) override {
         writeMessage(PUBLISH_TID, msg);
+    }
+
+    void writeMessage(const uint32_t tid, const std::vector<uint8_t> &msg) {
+        writeMessage(tid, &msg[0], msg.size());
     }
 
 private:
@@ -130,10 +135,6 @@ private:
         header->length = ntohl(msg_len);
         std::memcpy(&data_to_write.get()[sizeof(MessageHeader)], msg, msg_len);
         stream->write(std::move(data_to_write), frame_size);
-    }
-
-    void writeMessage(const uint32_t tid, const std::vector<uint8_t> &msg) {
-        writeMessage(tid, &msg[0], msg.size());
     }
 
 private:

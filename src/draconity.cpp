@@ -297,11 +297,10 @@ void send_gset_response(const uint64_t client_id, const uint32_t tid,
                         std::list<std::unordered_map<std::string, std::string>> &errors) {
     bson_t *response = BCON_NEW(
         "name", BCON_UTF8(grammar_name.c_str()),
-        "status", BCON_UTF8(status.c_str()),
-        "tid", BCON_INT32(tid)
+        "status", BCON_UTF8(status.c_str())
     );
     bson_append_errors(response, errors);
-    draconity_publish_one("g.set", response, client_id);
+    draconity_publish_one("g.set", response, tid, client_id);
 }
 
 /* Empty the entire shadow state for a particular client.
@@ -472,11 +471,10 @@ void Draconity::set_words(std::set<std::string> &new_words, std::list<std::unord
 void send_wset_response(uint64_t client_id, uint32_t tid, std::string status,
                         std::list<std::unordered_map<std::string, std::string>> errors) {
     bson_t *response = BCON_NEW(
-        "status", BCON_UTF8(status.c_str()),
-        "tid", BCON_INT32(tid)
+        "status", BCON_UTF8(status.c_str())
     );
     bson_append_errors(response, errors);
-    draconity_publish_one("w.set", response, client_id);
+    draconity_publish_one("w.set", response, tid, client_id);
 }
 
 void Draconity::handle_word_failures(std::list<std::unordered_map<std::string, std::string>> &errors) {
