@@ -570,7 +570,7 @@ void draconity_mimic_done(int key, dsx_mimic *mimic) {
         uint64_t client_id = mimic_info.first;
         uint32_t tid = mimic_info.second;
         draconity_send("mimic",
-                       BCON_NEW("cmd", "mimic.done"),
+                       success_msg(),
                        tid,
                        client_id);
     }
