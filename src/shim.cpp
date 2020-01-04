@@ -232,6 +232,7 @@ static std::list<SymbolLoad> server_syms {
     s(DSXWordEnum_End),
 
     s(DSXEngine_GetCurrentSpeaker),
+    s(DSXEngine_GetLanguageID),
     s(DSXEngine_SetMicState),
     s(DSXEngine_GetMicState),
     s(DSXEngine_LoadGrammar),

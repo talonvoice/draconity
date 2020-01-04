@@ -366,11 +366,16 @@ static bson_t *handle_message(uint64_t client_id, uint32_t tid, const std::vecto
         bson_t grammars, child;
         char keystr[16];
         const char *key;
+        int language_id = -1;
+        if (_engine && draconity->ready) {
+            _DSXEngine_GetLanguageID(_engine, &language_id);
+        }
         bson_t *doc = BCON_NEW(
             "engine_name", BCON_UTF8(draconity->engine_name.c_str()),
             "success", BCON_BOOL(true),
             "ready", BCON_BOOL(draconity->ready),
-            "runtime", BCON_INT64(bson_get_monotonic_time() - draconity->start_ts));
+            "runtime", BCON_INT64(bson_get_monotonic_time() - draconity->start_ts),
+            "language_id", BCON_INT64(language_id));
 
         BSON_APPEND_ARRAY_BEGIN(doc, "grammars", &grammars);
         // Iterate over an index and the current grammar
