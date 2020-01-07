@@ -3,7 +3,7 @@
 cd "$(dirname "$0")"
 base=$(pwd)
 mkdir -p opt
-export DESTDIR=$(pwd)/opt
+export PREFIX=$(pwd)/opt
 
 if which pacman; then
     pacman -S --needed mingw-w64-i686-{gcc,make,cmake,libuv}
@@ -20,7 +20,7 @@ if [[ ! -d "mongo-c-driver-$mongo_version" ]]; then
 fi
 cd "mongo-c-driver-$mongo_version"
 mkdir -p cmake-build; cd cmake-build
-cmake .. -DENABLE_AUTOMATIC_INIT_AND_CLEANUP=OFF -DCMAKE_BUILD_TYPE=Release -DENABLE_BSON=ON -DENABLE_MONGOC=OFF -DENABLE_EXAMPLES=OFF
+cmake .. -DENABLE_AUTOMATIC_INIT_AND_CLEANUP=OFF -DCMAKE_BUILD_TYPE=Release -DENABLE_BSON=ON -DENABLE_MONGOC=OFF -DENABLE_EXAMPLES=OFF -DCMAKE_INSTALL_PREFIX="$PREFIX"
 make -j4 && make install
 
 cd "$base"
@@ -30,9 +30,9 @@ if [[ ! -d "zydis-$zydis_version" ]]; then
     tar -xf "zydis-$zydis_version.tar.gz"
 fi
 cd "zydis-$zydis_version"
-cmake . -DZYDIS_BUILD_EXAMPLES=NO -DZYDIS_BUILD_TOOLS=NO
+cmake . -DZYDIS_BUILD_EXAMPLES=NO -DZYDIS_BUILD_TOOLS=NO -DCMAKE_INSTALL_PREFIX="$PREFIX"
 make -j4 && make install
 
 cd "$base"
-cmake . -DCMAKE_INSTALL_PREFIX="$DESTDIR"
+cmake . -DCMAKE_INSTALL_PREFIX="$PREFIX"
 make -j4
