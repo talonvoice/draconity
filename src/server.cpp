@@ -366,7 +366,7 @@ static bson_t *handle_message(uint64_t client_id, uint32_t tid, const std::vecto
         bson_t grammars, child;
         char keystr[16];
         const char *key;
-        int language_id = -1;
+        intptr_t language_id = -1;
         if (_engine && draconity->ready) {
             _DSXEngine_GetLanguageID(_engine, &language_id);
         }
@@ -502,7 +502,7 @@ void draconity_ready() {
     readyLock.lock();
     if (!draconity->ready) {
         printf("[+] status: ready\n");
-        int language_id = -1;
+        intptr_t language_id = -1;
         if (_engine) {
             _DSXEngine_GetLanguageID(_engine, &language_id);
         }
@@ -540,7 +540,7 @@ void draconity_attrib_changed(int key, dsx_attrib *attrib) {
         if (!draconity->ready) {
             draconity_ready();
         } else {
-            int language_id = -1;
+            intptr_t language_id = -1;
             if (_engine) {
                 _DSXEngine_GetLanguageID(_engine, &language_id);
             }
