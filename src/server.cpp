@@ -502,9 +502,14 @@ void draconity_ready() {
     readyLock.lock();
     if (!draconity->ready) {
         printf("[+] status: ready\n");
+        int language_id = -1;
+        if (_engine) {
+            _DSXEngine_GetLanguageID(_engine, &language_id);
+        }
         draconity_publish("status",
             BCON_NEW("cmd", BCON_UTF8("ready"),
-                     "engine_name", BCON_UTF8(draconity->engine_name.c_str()) ));
+                     "engine_name", BCON_UTF8(draconity->engine_name.c_str()),
+                     "language_id", BCON_INT64(language_id)));
         draconity->ready = true;
     }
     readyLock.unlock();
@@ -532,7 +537,17 @@ void draconity_attrib_changed(int key, dsx_attrib *attrib) {
         draconity_set_default_params();
         // this is slow
         // void *speaker = _DSXEngine_GetCurrentSpeaker(_engine);
-        draconity_ready();
+        if (!draconity->ready) {
+            draconity_ready();
+        } else {
+            int language_id = -1;
+            if (_engine) {
+                _DSXEngine_GetLanguageID(_engine, &language_id);
+            }
+            draconity_publish("status",
+                BCON_NEW("cmd", BCON_UTF8("speaker_change"),
+                         "language_id", BCON_INT64(language_id)));
+        }
         // state.speaker = speaker;
     } else if (streq(attr, "TOPICCHANGED")) {
         // ?
