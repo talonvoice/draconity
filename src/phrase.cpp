@@ -63,7 +63,7 @@ static void result_to_bson(bson_t *obj, dsx_result *result) {
     bson_append_array_end(obj, &words);
 }
 
-void phrase_publish(void *key, char *phrase, dsx_result *result, const char *cmd, bool use_result) {
+void phrase_publish(void *key, char *phrase, dsx_result *result, const char *cmd, bool use_result, bool send_wav) {
     bson_t obj = BSON_INITIALIZER;
     std::shared_ptr<Grammar> grammar = draconity->get_grammar((uintptr_t)key);
     if (grammar == NULL) return;
@@ -73,6 +73,12 @@ void phrase_publish(void *key, char *phrase, dsx_result *result, const char *cmd
     if (use_result) {
         phrase_to_bson(&obj, phrase);
         result_to_bson(&obj, result);
+        if (send_wav) {
+            dsx_dataptr dp = {.data = NULL, .size = 0};
+            if (_DSXResult_GetWAV(result, &dp) == 0 && dp.data != NULL && dp.size > 0) {
+                BSON_APPEND_BINARY(&obj, "wav", BSON_SUBTYPE_BINARY, (const uint8_t *)dp.data, dp.size);
+            }
+        }
     } else {
         bson_t array;
         BSON_APPEND_ARRAY_BEGIN(&obj, "phrase", &array);
@@ -85,13 +91,13 @@ int phrase_end(void *key, dsx_end_phrase *endphrase) {
     bool accept = (endphrase->flags & 1) == 1;
     bool ours = (endphrase->flags & 2) == 2;
 
-    phrase_publish(key, endphrase->phrase, endphrase->result, "p.end", (accept && ours));
+    phrase_publish(key, endphrase->phrase, endphrase->result, "p.end", (accept && ours), true);
     _DSXResult_Destroy(endphrase->result);
     return 0;
 }
 
 int phrase_hypothesis(void *key, dsx_hypothesis *hypothesis) {
-    phrase_publish(key, hypothesis->phrase, hypothesis->result, "p.hypothesis", true);
+    phrase_publish(key, hypothesis->phrase, hypothesis->result, "p.hypothesis", true, false);
     _DSXResult_Destroy(hypothesis->result);
     return 0;
 }

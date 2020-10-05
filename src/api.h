@@ -62,6 +62,7 @@ DLAPI int (*_DSXGrammar_SetPriority)(drg_grammar *grammar, int priority);
 DLAPI int (*_DSXGrammar_SetSpecialGrammar)(drg_grammar *grammar, int special);
 DLAPI int (*_DSXGrammar_Unregister)(drg_grammar *grammar, unsigned int key);
 
+DLAPI int (*_DSXResult_GetWAV)(dsx_result *result, dsx_dataptr *data);
 DLAPI int (*_DSXResult_BestPathWord)(dsx_result *result, int choice, uint32_t *path, size_t pathSize, size_t *needed);
 DLAPI int (*_DSXResult_GetWordNode)(dsx_result *result, uint32_t path, void *node, uint32_t *num, char **name);
 DLAPI int (*_DSXResult_Destroy)(dsx_result *result);

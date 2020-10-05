@@ -271,6 +271,7 @@ static std::list<SymbolLoad> server_syms {
     s(DSXGrammar_SetSpecialGrammar),
     s(DSXGrammar_Unregister),
 
+    s(DSXResult_GetWAV),
     s(DSXResult_BestPathWord),
     s(DSXResult_GetWordNode),
     s(DSXResult_Destroy),
