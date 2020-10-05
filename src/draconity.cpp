@@ -297,7 +297,8 @@ void send_gset_response(const uint64_t client_id, const uint32_t tid,
                         std::list<std::unordered_map<std::string, std::string>> &errors) {
     bson_t *response = BCON_NEW(
         "name", BCON_UTF8(grammar_name.c_str()),
-        "status", BCON_UTF8(status.c_str())
+        "status", BCON_UTF8(status.c_str()),
+        "success", BCON_BOOL(status == "success")
     );
     bson_append_errors(response, errors);
     draconity_send("g.set", response, tid, client_id);
@@ -471,7 +472,8 @@ void Draconity::set_words(std::set<std::string> &new_words, std::list<std::unord
 void send_wset_response(uint64_t client_id, uint32_t tid, std::string status,
                         std::list<std::unordered_map<std::string, std::string>> errors) {
     bson_t *response = BCON_NEW(
-        "status", BCON_UTF8(status.c_str())
+        "status", BCON_UTF8(status.c_str()),
+        "success", BCON_BOOL(status == "success")
     );
     bson_append_errors(response, errors);
     draconity_send("w.set", response, tid, client_id);
