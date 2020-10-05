@@ -48,10 +48,10 @@ void draconity_publish(const char *topic, bson_t *obj) {
 }
 
 /* Publish a message to a single client */
-void draconity_publish_one(const char *topic, bson_t *obj, uint64_t client_id) {
+void draconity_send(const char *topic, bson_t *obj, uint32_t tid, uint64_t client_id) {
     auto response = prep_response(topic, obj);
     if (!response.empty()) {
-        draconity_transport_publish_one(std::move(response), client_id);
+        draconity_transport_send(std::move(response), tid, client_id);
     }
 }
 
@@ -231,8 +231,8 @@ static bson_t *handle_message(uint64_t client_id, uint32_t tid, const std::vecto
 
             draconity->set_shadow_words(client_id, tid, shadow_words);
 
-            resp = success_msg();
-            goto end;
+            // Response will be sent when update is synced (or discarded).
+            goto no_response;
         } else {
             goto unsupported_command;
         }
@@ -331,8 +331,8 @@ static bson_t *handle_message(uint64_t client_id, uint32_t tid, const std::vecto
             // client to correct errors before unpausing).
             draconity->sync_state();
         }
-        resp = success_msg();
-        goto end;
+        // Response will be sent when update is synced (or discarded).
+        goto no_response;
     } else if (streq(cmd, "mic.set_state")) {
         if (!state) {
             errmsg = "missing or broken state field";
@@ -451,7 +451,8 @@ static bson_t *handle_message(uint64_t client_id, uint32_t tid, const std::vecto
         draconity->mimic_lock.lock();
         draconity->mimic_queue.push({client_id, tid});
         draconity->mimic_lock.unlock();
-        resp = success_msg();
+        // Response will be sent once mimic completes.
+        goto no_response;
     } else {
         goto unsupported_command;
     }
@@ -469,9 +470,6 @@ end:
         bson_free(resp);
         resp = BCON_NEW("success", BCON_BOOL(false), "error", BCON_UTF8(errmsg.c_str()));
     }
-    if (!resp) {
-        resp = BCON_NEW("success", BCON_BOOL(false), "error", BCON_UTF8("server did not return a response"));
-    }
     // reinit to reset + appease ASAN
     if (bson_init_static(&root, &msg[0], msg.size())) {
         BSON_APPEND_DOCUMENT(pub, "cmd", &root);
@@ -485,6 +483,10 @@ not_ready:
 
 unsupported_command:
     errmsg = "unsupported command";
+    goto end;
+
+no_response:
+    resp = NULL;
     goto end;
 }
 
@@ -567,10 +569,10 @@ void draconity_mimic_done(int key, dsx_mimic *mimic) {
         draconity->mimic_lock.unlock();
         uint64_t client_id = mimic_info.first;
         uint32_t tid = mimic_info.second;
-        draconity_publish_one("mimic",
-                              BCON_NEW("cmd", "mimic.done",
-                                       "tid", BCON_INT32(tid)),
-                              client_id);
+        draconity_send("mimic",
+                       success_msg(),
+                       tid,
+                       client_id);
     }
 }
 

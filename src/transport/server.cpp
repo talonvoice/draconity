@@ -189,12 +189,12 @@ void UvServer::publish(std::vector<uint8_t> msg) {
 
    If the client no longer exists, does nothing.
  */
-void UvServer::publish_one(std::vector<uint8_t> msg, uint64_t client_id) {
+void UvServer::send(std::vector<uint8_t> msg, uint32_t tid, uint64_t client_id) {
     // TODO: Store clients in a map for quicker id lookup?
-    invoke([this, client_id, msg{std::move(msg)}] {
+    invoke([this, tid, client_id, msg{std::move(msg)}] {
         for (auto const &client : clients) {
             if (client->id == client_id) {
-                client->publish(std::move(msg));
+                client->writeMessage(tid, std::move(msg));
                 return;
             }
         }
@@ -229,7 +229,7 @@ void draconity_transport_publish(std::vector<uint8_t> data) {
     server->publish(std::move(data));
 }
 
-void draconity_transport_publish_one(std::vector<uint8_t> data, uint64_t client_id) {
+void draconity_transport_send(std::vector<uint8_t> data, uint32_t tid, uint64_t client_id) {
     if (!server) return;
-    server->publish_one(std::move(data), client_id);
+    server->send(std::move(data), tid, client_id);
 }

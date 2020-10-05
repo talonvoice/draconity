@@ -291,17 +291,16 @@ void bson_append_errors(bson_t *response,
    `status` can be one of { "success", "error", "skipped" }.
 
  */
-void publish_gset_response(const uint64_t client_id, const uint32_t tid,
-                           std::string &grammar_name,
-                           std::string status,
-                           std::list<std::unordered_map<std::string, std::string>> &errors) {
+void send_gset_response(const uint64_t client_id, const uint32_t tid,
+                        std::string &grammar_name,
+                        std::string status,
+                        std::list<std::unordered_map<std::string, std::string>> &errors) {
     bson_t *response = BCON_NEW(
         "name", BCON_UTF8(grammar_name.c_str()),
-        "status", BCON_UTF8(status.c_str()),
-        "tid", BCON_INT32(tid)
+        "status", BCON_UTF8(status.c_str())
     );
     bson_append_errors(response, errors);
-    draconity_publish_one("g.set", response, client_id);
+    draconity_send("g.set", response, tid, client_id);
 }
 
 /* Empty the entire shadow state for a particular client.
@@ -381,8 +380,8 @@ void Draconity::sync_grammars() {
             grammar->errors = {};
         }
 
-        publish_gset_response(shadow_state.client_id, shadow_state.tid,
-                              name, operation_status, errors);
+        send_gset_response(shadow_state.client_id, shadow_state.tid,
+                           name, operation_status, errors);
     }
     // Only un-synced grammars should be in the shadow state.
     this->shadow_grammars.clear();
@@ -469,14 +468,13 @@ void Draconity::set_words(std::set<std::string> &new_words, std::list<std::unord
    distinct from the result of the initial API call.
 
  */
-void publish_wset_response(uint64_t client_id, uint32_t tid, std::string status,
-                           std::list<std::unordered_map<std::string, std::string>> errors) {
+void send_wset_response(uint64_t client_id, uint32_t tid, std::string status,
+                        std::list<std::unordered_map<std::string, std::string>> errors) {
     bson_t *response = BCON_NEW(
-        "status", BCON_UTF8(status.c_str()),
-        "tid", BCON_INT32(tid)
+        "status", BCON_UTF8(status.c_str())
     );
     bson_append_errors(response, errors);
-    draconity_publish_one("w.set", response, client_id);
+    draconity_send("w.set", response, tid, client_id);
 }
 
 void Draconity::handle_word_failures(std::list<std::unordered_map<std::string, std::string>> &errors) {
@@ -499,9 +497,9 @@ void Draconity::handle_word_failures(std::list<std::unordered_map<std::string, s
             }
         }
         if (client_errors.size() == 0) {
-            publish_wset_response(client_id, tid, "success", client_errors);
+            send_wset_response(client_id, tid, "success", client_errors);
         } else {
-            publish_wset_response(client_id, tid, "error", client_errors);
+            send_wset_response(client_id, tid, "error", client_errors);
         }
     }
 }
@@ -539,7 +537,7 @@ void Draconity::set_shadow_grammar(std::string name, GrammarState &shadow_gramma
     if (skipped_it != this->shadow_grammars.end()) {
         GrammarState &skipped = skipped_it->second;
         std::list<std::unordered_map<std::string, std::string>> no_errors = {};
-        publish_gset_response(skipped.client_id, skipped.tid, name, "skipped", no_errors);
+        send_gset_response(skipped.client_id, skipped.tid, name, "skipped", no_errors);
     }
     this->shadow_grammars[name] = std::move(shadow_grammar);
     this->shadow_lock.unlock();
@@ -551,7 +549,7 @@ void Draconity::set_shadow_words(uint64_t client_id, uint32_t tid, std::set<std:
     if ((existing_it != this->shadow_words.end()) && !existing_it->second.synced) {
         // An unsynced update exists. We need to tell the client it was skipped.
         std::list<std::unordered_map<std::string, std::string>> no_errors = {};
-        publish_wset_response(client_id, existing_it->second.last_tid, "skipped", no_errors);
+        send_wset_response(client_id, existing_it->second.last_tid, "skipped", no_errors);
     }
     WordState new_state;
     new_state.last_tid = tid;

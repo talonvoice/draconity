@@ -4,6 +4,7 @@
 class UvClientBase {
 public:
     virtual void publish(const std::vector<uint8_t> &msg) {}
+    virtual void writeMessage(const uint32_t tid, const std::vector<uint8_t> &msg) {}
     virtual ~UvClientBase() {};
 public:
     uint64_t id;
@@ -58,6 +59,10 @@ public:
         writeMessage(PUBLISH_TID, msg);
     }
 
+    void writeMessage(const uint32_t tid, const std::vector<uint8_t> &msg) {
+        writeMessage(tid, &msg[0], msg.size());
+    }
+
 private:
     void handleMessage(std::vector<uint8_t> &msg) {
         bson_t *reply = nullptr;
@@ -66,10 +71,14 @@ private:
         } else {
             reply = handle_message_callback(this->id, received_header->tid, msg);
         }
-        uint32_t reply_length;
-        uint8_t *reply_data = bson_destroy_with_steal(reply, true, &reply_length);
-        writeMessage(received_header->tid, reply_data, reply_length);
-        bson_free(reply_data);
+        // HACK: Some messages won't return a reply immediately. If a message
+        //   returns null, it's making a pinky promise to reply later.
+        if (reply) {
+            uint32_t reply_length;
+            uint8_t *reply_data = bson_destroy_with_steal(reply, true, &reply_length);
+            writeMessage(received_header->tid, reply_data, reply_length);
+            bson_free(reply_data);
+        }
     }
 
     bson_t *handleAuth(std::vector<uint8_t> &msg) {
@@ -126,10 +135,6 @@ private:
         header->length = ntohl(msg_len);
         std::memcpy(&data_to_write.get()[sizeof(MessageHeader)], msg, msg_len);
         stream->write(std::move(data_to_write), frame_size);
-    }
-
-    void writeMessage(const uint32_t tid, const std::vector<uint8_t> &msg) {
-        writeMessage(tid, &msg[0], msg.size());
     }
 
 private:
