@@ -4,9 +4,17 @@
 #include "abstract_platform.h"
 #include "code_hook.h"
 
+#if _WIN64 || __x86_64__
+#define ZYDIS_MACHINE ZYDIS_MACHINE_MODE_LONG_64
+#define ZYDIS_ASIZE ZYDIS_ADDRESS_WIDTH_64
+#else
+#define ZYDIS_MACHINE ZYDIS_MACHINE_MODE_LONG_COMPAT_32
+#define ZYDIS_ASIZE ZYDIS_ADDRESS_WIDTH_32
+#endif
+
 static size_t dis_code_size(uint8_t *addr, size_t size) {
     ZydisDecoder dis;
-    ZydisDecoderInit(&dis, ZYDIS_MACHINE_MODE_LONG_COMPAT_32, ZYDIS_ADDRESS_WIDTH_32);
+    ZydisDecoderInit(&dis, ZYDIS_MACHINE, ZYDIS_ASIZE);
     size_t offset = 0;
     ZydisDecodedInstruction ins;
     while (ZYDIS_SUCCESS(ZydisDecoderDecodeBuffer(&dis, addr + offset, 64, (uint64_t)addr + offset, &ins)) && offset < size) {
@@ -17,7 +25,7 @@ static size_t dis_code_size(uint8_t *addr, size_t size) {
 
 static void dis_mem(uint8_t *addr, size_t size) {
     ZydisDecoder dis;
-    ZydisDecoderInit(&dis, ZYDIS_MACHINE_MODE_LONG_COMPAT_32, ZYDIS_ADDRESS_WIDTH_32);
+    ZydisDecoderInit(&dis, ZYDIS_MACHINE, ZYDIS_ASIZE);
     ZydisFormatter dis_fmt;
     ZydisFormatterInit(&dis_fmt, ZYDIS_FORMATTER_STYLE_INTEL);
     size_t offset = 0;
