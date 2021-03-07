@@ -59,7 +59,7 @@ public:
         writeMessage(PUBLISH_TID, msg);
     }
 
-    void writeMessage(const uint32_t tid, const std::vector<uint8_t> &msg) {
+    void writeMessage(const uint32_t tid, const std::vector<uint8_t> &msg) override {
         writeMessage(tid, &msg[0], msg.size());
     }
 
