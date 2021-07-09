@@ -57,9 +57,6 @@ static void engine_setup(drg_engine *engine) {
     ret = _DSXEngine_RegisterPausedCallback(engine, draconity_paused, (void*)"paused?", NULL, &cb_key);
     if (ret) draconity_logf("error adding paused callback: %d", ret);
 
-    ret = _DSXEngine_SetBeginPhraseCallback(engine, draconity_phrase_begin, NULL, &cb_key);
-    if (ret) draconity_logf("error setting phrase begin callback: %d", ret);
-
     draconity_set_default_params();
 
     printf("[+] status: start\n");
