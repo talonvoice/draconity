@@ -235,7 +235,10 @@ void set_list(std::shared_ptr<Grammar> &grammar, const std::string &name, std::s
 
 void sync_lists(std::shared_ptr<Grammar> &grammar, GrammarState &shadow_state) {
     for (auto &list_pair : shadow_state.lists) {
-        set_list(grammar, list_pair.first, list_pair.second);
+        auto it = grammar->state.lists.find(list_pair.first);
+        if (it == grammar->state.lists.end() || it->second != list_pair.second) {
+            set_list(grammar, list_pair.first, list_pair.second);
+        }
     }
 }
 
