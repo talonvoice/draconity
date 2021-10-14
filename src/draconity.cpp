@@ -233,12 +233,6 @@ void set_list(std::shared_ptr<Grammar> &grammar, const std::string &name, std::s
     grammar->state.lists[name] = std::move(list);
 }
 
-void sync_lists(std::shared_ptr<Grammar> &grammar, GrammarState &shadow_state) {
-    for (auto &list_pair : shadow_state.lists) {
-        set_list(grammar, list_pair.first, list_pair.second);
-    }
-}
-
 void sync_grammar(std::shared_ptr<Grammar> &grammar, GrammarState &shadow_state) {
     // This is where we'll accumulate errors to send to the client if things go
     // wrong - start with clean slate.
@@ -258,8 +252,11 @@ void sync_grammar(std::shared_ptr<Grammar> &grammar, GrammarState &shadow_state)
     if (grammar->state.active_rules != shadow_state.active_rules) {
         sync_rules(grammar, shadow_state);
     }
-    if (grammar->state.lists != shadow_state.lists) {
-        sync_lists(grammar, shadow_state);
+    for (auto &list_pair : shadow_state.lists) {
+        auto it = grammar->state.lists.find(list_pair.first);
+        if (it == grammar->state.lists.end() || it->second != list_pair.second) {
+            set_list(grammar, list_pair.first, list_pair.second);
+        }
     }
     // TODO: Sync exclusivity
     grammar->state.client_id = shadow_state.client_id;
