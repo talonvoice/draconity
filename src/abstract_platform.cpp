@@ -102,7 +102,7 @@ int Platform::applyHooks(std::string moduleName, std::list<CodeHook> &hooks) {
 std::string Platform::homedir() {
     char *home = getenv("HOME");
     if (home) {
-        return strdup(home);
+        return home;
     } else {
         struct passwd pw, *pwp;
         char buf[1024];
