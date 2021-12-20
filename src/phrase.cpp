@@ -1,4 +1,5 @@
 #include <bson.h>
+#include "dr_time.h"
 #include "draconity.h"
 #include "phrase.h"
 #include "server.h"
@@ -38,6 +39,7 @@ static void result_to_bson(bson_t *obj, dsx_result *result) {
         uint32_t *paths = new uint32_t[needed];
         rc = _DSXResult_BestPathWord(result, 0, paths, needed, &needed);
         if (rc == 0) {
+            int64_t ts_offset_ns = dr_monotonic_offset();
             dsx_word_node node;
             // get the rule number and cfg node information for each word
             for (uint32_t i = 0; i < needed / sizeof(uint32_t); i++) {
@@ -47,14 +49,19 @@ static void result_to_bson(bson_t *obj, dsx_result *result) {
                 if (rc || word == NULL) {
                     break;
                 }
+                int64_t start_time_ms = node.start_time;
+                int64_t end_time_ms   = node.end_time;
+                int64_t start_time_ns = (start_time_ms * 1e6L) + ts_offset_ns;
+                int64_t end_time_ns   = (end_time_ms   * 1e6L) + ts_offset_ns;
+
                 bson_t wdoc;
                 bson_uint32_to_string(i, &key, keystr, sizeof(keystr));
                 BSON_APPEND_DOCUMENT_BEGIN(&words, key, &wdoc);
                 BSON_APPEND_UTF8(&wdoc, "word", word);
                 BSON_APPEND_INT32(&wdoc, "id", id);
                 BSON_APPEND_INT32(&wdoc, "rule", node.rule);
-                BSON_APPEND_INT64(&wdoc, "start", node.start_time);
-                BSON_APPEND_INT64(&wdoc, "end", node.end_time);
+                BSON_APPEND_INT64(&wdoc, "start", start_time_ns);
+                BSON_APPEND_INT64(&wdoc, "end", end_time_ns);
                 bson_append_document_end(&words, &wdoc);
             }
         }
