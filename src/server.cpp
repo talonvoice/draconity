@@ -14,6 +14,7 @@
 #include "phrase.h"
 #include "server.h"
 #include "draconity.h"
+#include "dr_time.h"
 
 #ifndef streq
 #define streq(a, b) !strcmp(a, b)
@@ -25,7 +26,7 @@
 
 /* Prepare a response to be pubished */
 std::vector<uint8_t> prep_response(const char *topic, bson_t *obj) {
-    BSON_APPEND_INT64(obj, "ts", bson_get_monotonic_time());
+    BSON_APPEND_INT64(obj, "ts", dr_monotonic_time());
     BSON_APPEND_UTF8(obj, "topic", topic);
     uint32_t length = 0;
     uint8_t *buf = bson_destroy_with_steal(obj, true, &length);
@@ -374,7 +375,7 @@ static bson_t *handle_message(uint64_t client_id, uint32_t tid, const std::vecto
             "engine_name", BCON_UTF8(draconity->engine_name.c_str()),
             "success", BCON_BOOL(true),
             "ready", BCON_BOOL(draconity->ready),
-            "runtime", BCON_INT64(bson_get_monotonic_time() - draconity->start_ts),
+            "runtime", BCON_INT64(dr_monotonic_time() - draconity->start_ts),
             "language_id", BCON_INT64(language_id));
 
         BSON_APPEND_ARRAY_BEGIN(doc, "grammars", &grammars);
@@ -495,7 +496,7 @@ void draconity_init() {
     // FIXME: this should just be draconity class init?
     draconity_transport_main(handle_message, draconity->config);
     draconity_publish("status", BCON_NEW("cmd", BCON_UTF8("thread_created")));
-    draconity->start_ts = bson_get_monotonic_time();
+    draconity->start_ts = dr_monotonic_time();
 }
 
 std::mutex readyLock;
