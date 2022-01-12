@@ -1,3 +1,4 @@
+#include <stdlib.h>
 #include "abstract_platform.h"
 
 std::string Platform::expanduser(std::string path) {
